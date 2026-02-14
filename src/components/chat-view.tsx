@@ -63,25 +63,12 @@ export function ChatView() {
         body: JSON.stringify({ address: addr }),
       })
         .then((r) => r.json())
-          .then((data) => {
-            if (data.success && data.result) {
-              const txHashes: string[] = Array.isArray(data.result) ? data.result : [data.result];
-              txHashes.forEach((txHash, i) => {
-                addSettlement({
-                  id: `faucet_${i}_${Date.now()}`,
-                  txHash,
-                  sessionId,
-                  amount: 0,
-                  tokensIn: 0,
-                  tokensOut: 0,
-                  timestamp: Date.now(),
-                  status: "settled",
-                });
-              });
-              addEvent("tick", `Wallet funded on Tempo Moderato testnet (${txHashes.length} tx)`);
-            }
-          })
-          .catch(() => {});
+        .then((data) => {
+          if (data.success) {
+            addEvent("tick", `Wallet funded on Tempo Moderato testnet`);
+          }
+        })
+        .catch(() => {});
     }, [wallets, getAddress, addEvent]);
 
   useEffect(() => {
@@ -245,11 +232,9 @@ export function ChatView() {
       <div className={`flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
         {/* Header */}
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
-            <div className="flex items-center gap-3">
-                <button onClick={() => window.location.reload()} className="flex items-center cursor-pointer">
-                  <Image src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} className="translate-y-[1px]" />
-                </button>
-              <span className="font-mono text-[10px] text-muted-foreground/40 uppercase tracking-wider leading-none translate-y-[1px]">
+            <div className="flex items-center gap-2">
+                <Image src="/logo-dark-copy.webp" alt="Meter" width={48} height={13} />
+              <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                 pay per thought
               </span>
             </div>

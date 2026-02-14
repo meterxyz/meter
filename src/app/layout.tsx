@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { VisualEditsMessenger } from "orchids-visual-edits";
 import { Providers } from "@/components/providers";
+import Script from "next/script";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -35,6 +36,12 @@ export default function RootLayout({
         <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased font-sans`}
       >
+        <Script
+          id="orchids-browser-logs"
+          src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts/orchids-browser-logs.js"
+          strategy="afterInteractive"
+          data-orchids-project-id="8c57dec5-0b72-4fe5-bd6f-938008ccdecf"
+        />
         <Providers>
           {children}
         </Providers>

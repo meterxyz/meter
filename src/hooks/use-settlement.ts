@@ -1,45 +1,54 @@
 "use client";
 
-import { useCallback } from "react";
-import { useWallets, useSendTransaction } from "@privy-io/react-auth";
-import { SETTLEMENT_RECEIVER, dollarToWei } from "@/lib/tempo";
-import { numberToHex } from "viem";
+import { useCallback, useRef } from "react";
+import { useWallets } from "@privy-io/react-auth";
+import { createWalletClient, custom } from "viem";
+import { tempoModerato, SETTLEMENT_RECEIVER, dollarToWei } from "@/lib/tempo";
 
 export function useSettlement() {
   const { wallets } = useWallets();
-  const { sendTransaction } = useSendTransaction();
+  const switchedRef = useRef(false);
 
-  const settle = useCallback(
-    async (amountUsd: number): Promise<string> => {
-      const value = dollarToWei(amountUsd);
+  const getWalletClient = useCallback(async () => {
+    const wallet = wallets.find((w) => w.walletClientType === "privy");
+    if (!wallet) throw new Error("No embedded wallet found");
 
-      try {
-        const receipt = await sendTransaction(
-          {
+    // Switch chain once per session
+    if (!switchedRef.current) {
+      await wallet.switchChain(tempoModerato.id);
+      switchedRef.current = true;
+    }
+
+    const provider = await wallet.getEthereumProvider();
+    return createWalletClient({
+      chain: tempoModerato,
+      transport: custom(provider),
+      account: wallet.address as `0x${string}`,
+    });
+  }, [wallets]);
+
+    const settle = useCallback(
+      async (amountUsd: number): Promise<string> => {
+        const client = await getWalletClient();
+        const value = dollarToWei(amountUsd);
+
+        try {
+          const hash = await client.sendTransaction({
             to: SETTLEMENT_RECEIVER,
-            value: numberToHex(value),
-          },
-          {
-            uiOptions: {
-              showWalletUIs: false,
-            },
+            value,
+          });
+          return hash;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Re-throw with a clean message instead of letting Privy handle it
+          if (msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("fund")) {
+            throw new Error("Insufficient testnet funds — request more from faucet");
           }
-        );
-        return receipt.hash;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (
-          msg.toLowerCase().includes("insufficient") ||
-          msg.toLowerCase().includes("fund") ||
-          msg.toLowerCase().includes("failed to fetch")
-        ) {
-          throw new Error("Settlement failed — network or funds issue");
+          throw err;
         }
-        throw err;
-      }
-    },
-    [sendTransaction]
-  );
+      },
+      [getWalletClient]
+    );
 
   const getAddress = useCallback((): string | null => {
     const wallet = wallets.find((w) => w.walletClientType === "privy");
