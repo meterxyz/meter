@@ -1,6 +1,28 @@
 {
-  "name": "nextjs-new",
+  "name": "meter",
   "version": "0.1.0",
+  "description": "Pay-per-thought AI — real-time metered, on-chain settled via Tempo",
+  "author": "Meter <hello@getmeter.xyz>",
+  "license": "MIT",
+  "homepage": "https://getmeter.xyz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meterxyz/meter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/meterxyz/meter/issues"
+  },
+  "keywords": [
+    "ai",
+    "pay-per-token",
+    "metered-ai",
+    "tempo",
+    "blockchain",
+    "on-chain-settlement",
+    "openrouter",
+    "crypto",
+    "web3"
+  ],
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
