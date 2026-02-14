@@ -1,59 +1,77 @@
 "use client";
 
-import { useCallback, useRef } from "react";
-import { useWallets } from "@privy-io/react-auth";
-import { createWalletClient, custom } from "viem";
-import { tempoModerato, SETTLEMENT_RECEIVER, dollarToWei } from "@/lib/tempo";
+import { useCallback } from "react";
+import { createWalletClient, http, encodeFunctionData } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import {
+  tempoModerato,
+  SETTLEMENT_RECEIVER,
+  PATHUSD_ADDRESS,
+  TIP20_ABI,
+  dollarToUnits,
+  formatMemo,
+} from "@/lib/tempo";
+import { useMeterStore } from "@/lib/store";
 
+/**
+ * Settlement hook using ephemeral session key.
+ * Session key holds its own pathUSD balance (funded during authorize).
+ * Uses TIP20 transfer(receiver, amount) — ZERO wallet popups during chat.
+ */
 export function useSettlement() {
-  const { wallets } = useWallets();
-  const switchedRef = useRef(false);
+  const sessionKeyPrivate = useMeterStore((s) => s.sessionKeyPrivate);
+  const sessionKeyAddress = useMeterStore((s) => s.sessionKeyAddress);
 
-  const getWalletClient = useCallback(async () => {
-    const wallet = wallets.find((w) => w.walletClientType === "privy");
-    if (!wallet) throw new Error("No embedded wallet found");
+  const settle = useCallback(
+    async (amountUsd: number, _ownerAddress: string, msgIndex?: number): Promise<string> => {
+      if (!sessionKeyPrivate) {
+        throw new Error("No session key — authorize first");
+      }
 
-    // Switch chain once per session
-    if (!switchedRef.current) {
-      await wallet.switchChain(tempoModerato.id);
-      switchedRef.current = true;
-    }
+      const account = privateKeyToAccount(sessionKeyPrivate as `0x${string}`);
+      const client = createWalletClient({
+        chain: tempoModerato,
+        transport: http(),
+        account,
+      });
 
-    const provider = await wallet.getEthereumProvider();
-    return createWalletClient({
-      chain: tempoModerato,
-      transport: custom(provider),
-      account: wallet.address as `0x${string}`,
-    });
-  }, [wallets]);
+      const amount = dollarToUnits(amountUsd);
+      const memo = formatMemo("session", msgIndex ?? 0) as `0x${string}`;
 
-    const settle = useCallback(
-      async (amountUsd: number): Promise<string> => {
-        const client = await getWalletClient();
-        const value = dollarToWei(amountUsd);
+      try {
+        // Use transferWithMemo: session key transfers from its own balance
+        const data = encodeFunctionData({
+          abi: TIP20_ABI,
+          functionName: "transferWithMemo",
+          args: [SETTLEMENT_RECEIVER, amount, memo],
+        });
 
-        try {
-          const hash = await client.sendTransaction({
-            to: SETTLEMENT_RECEIVER,
-            value,
-          });
-          return hash;
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          // Re-throw with a clean message instead of letting Privy handle it
-          if (msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("fund")) {
-            throw new Error("Insufficient testnet funds — request more from faucet");
-          }
-          throw err;
+        const hash = await client.sendTransaction({
+          to: PATHUSD_ADDRESS,
+          data,
+          value: BigInt(0),
+        });
+
+        return hash;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (
+          msg.toLowerCase().includes("insufficient") ||
+          msg.toLowerCase().includes("fund")
+        ) {
+          throw new Error(
+            "Insufficient session key balance — top up tokens or start a new session"
+          );
         }
-      },
-      [getWalletClient]
-    );
+        throw err;
+      }
+    },
+    [sessionKeyPrivate]
+  );
 
   const getAddress = useCallback((): string | null => {
-    const wallet = wallets.find((w) => w.walletClientType === "privy");
-    return wallet?.address ?? null;
-  }, [wallets]);
+    return sessionKeyAddress;
+  }, [sessionKeyAddress]);
 
   return { settle, getAddress };
 }

@@ -1,14 +1,103 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { useMeterStore } from "@/lib/store";
+import { useRef, useEffect, useState } from "react";
+import { useMeterStore, Settlement } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { Inspector } from "@/components/inspector";
-import { usePrivy, useWallets, useCreateWallet } from "@privy-io/react-auth";
-import { formatMemo } from "@/lib/tempo";
+import { useWallets } from "@privy-io/react-auth";
+import { formatMemo, txExplorerUrl } from "@/lib/tempo";
 import { useSettlement } from "@/hooks/use-settlement";
-import Image from "next/image";
 
+/* ─── Receipt card (expandable) ────────────────────────────────── */
+function ReceiptCard({ settlement }: { settlement: Settlement }) {
+  const [open, setOpen] = useState(false);
+  const statusColor =
+    settlement.status === "settled"
+      ? "text-emerald-500"
+      : settlement.status === "failed"
+      ? "text-red-400"
+      : "text-yellow-500";
+  const statusLabel =
+    settlement.status === "settled"
+      ? "settled"
+      : settlement.status === "failed"
+      ? "failed"
+      : "settling...";
+
+  return (
+    <div className="mt-1">
+      {/* Inline settlement summary */}
+      <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+        <span>{settlement.tokensIn} in</span>
+        <span>{settlement.tokensOut} out</span>
+        <span>${settlement.amount.toFixed(6)}</span>
+        {/* Clickable receipt icon */}
+        <button
+          onClick={() => setOpen(!open)}
+          className="hover:text-foreground transition-colors"
+          title="Toggle receipt"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+            <path d="M8 10h8" />
+            <path d="M8 14h4" />
+          </svg>
+        </button>
+        {!open && (
+          <span className={`${statusColor}`}>{statusLabel}</span>
+        )}
+      </div>
+
+      {/* Expandable receipt card */}
+      {open && (
+        <div className="mt-2 rounded-lg border border-border bg-card p-3 font-mono text-[11px] max-w-[280px]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-muted-foreground font-medium">RECEIPT</span>
+            <span className={`${statusColor} font-medium`}>{statusLabel}</span>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tx</span>
+              {settlement.txHash ? (
+                <a
+                  href={txExplorerUrl(settlement.txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:underline"
+                >
+                  {settlement.txHash.slice(0, 10)}...{settlement.txHash.slice(-6)}
+                </a>
+              ) : (
+                <span className="text-muted-foreground/50">awaiting...</span>
+              )}
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tokens</span>
+              <span className="text-foreground">
+                {settlement.tokensIn} in / {settlement.tokensOut} out
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-foreground">${settlement.amount.toFixed(6)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Main ChatView ────────────────────────────────────────────── */
 export function ChatView() {
   const {
     messages,
@@ -23,59 +112,38 @@ export function ChatView() {
     sessionId,
     totalCost,
     maxSpend,
+    settlements,
     addSettlement,
     updateSettlement,
+    linkSettlementToMessage,
   } = useMeterStore();
 
-  const { logout, ready, authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const { createWallet } = useCreateWallet();
-  const { settle, getAddress } = useSettlement();
+  const { settle } = useSettlement();
   const msgIndexRef = useRef(0);
-    const inputRef = useRef<HTMLTextAreaElement>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const fundedRef = useRef(false);
-    const walletCreatedRef = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const openedInspectorRef = useRef(false);
 
-    // Create embedded wallet if user doesn't have one yet
-    useEffect(() => {
-      if (!ready || !authenticated || walletCreatedRef.current) return;
-      const hasEmbedded = wallets.some((w) => w.walletClientType === "privy");
-      if (hasEmbedded) {
-        walletCreatedRef.current = true;
-        return;
-      }
-      walletCreatedRef.current = true;
-      createWallet().catch((err) => {
-        console.warn("[wallet] creation failed:", err);
-      });
-    }, [ready, authenticated, wallets, createWallet]);
+  const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
+  const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
 
-    // Fund embedded wallet from Tempo testnet faucet once
-    useEffect(() => {
-      if (fundedRef.current) return;
-      const addr = getAddress();
-      if (!addr) return;
-      fundedRef.current = true;
-      fetch("/api/faucet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: addr }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.success) {
-            addEvent("tick", `Wallet funded on Tempo Moderato testnet`);
-          }
-        })
-        .catch(() => {});
-    }, [wallets, getAddress, addEvent]);
+  const connectedWallet = wallets.find((w) => w.walletClientType !== "privy") ?? wallets[0];
+  const walletAddress = connectedWallet?.address;
+
+  // Auto-open inspector to wallet tab on first mount
+  useEffect(() => {
+    if (openedInspectorRef.current) return;
+    openedInspectorRef.current = true;
+    setInspectorOpen(true);
+    setInspectorTab("wallet");
+  }, [setInspectorOpen, setInspectorTab]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, settlements]);
 
   const handleSend = async () => {
     const input = inputRef.current;
@@ -97,8 +165,9 @@ export function ChatView() {
     };
     addMessage(userMsg);
 
+    const assistantMsgId = Math.random().toString(36).slice(2, 10);
     const assistantMsg = {
-      id: Math.random().toString(36).slice(2, 10),
+      id: assistantMsgId,
       role: "assistant" as const,
       content: "",
       tokensOut: 0,
@@ -125,93 +194,89 @@ export function ChatView() {
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No reader");
 
-        const decoder = new TextDecoder();
-          let fullContent = "";
-          let finalUsage: { tokensIn: number; tokensOut: number } | null = null;
-          let buffer = "";
+      const decoder = new TextDecoder();
+      let fullContent = "";
+      let finalUsage: { tokensIn: number; tokensOut: number } | null = null;
+      let buffer = "";
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true });
 
-            // Process only complete lines (terminated by \n)
-            let newlineIdx: number;
-            while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-              const line = buffer.slice(0, newlineIdx).trim();
-              buffer = buffer.slice(newlineIdx + 1);
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
 
-              if (!line.startsWith("data: ")) continue;
-              const payload = line.slice(6);
-              if (payload === "[DONE]") continue;
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6);
+          if (payload === "[DONE]") continue;
 
-              try {
-                const data = JSON.parse(payload);
-                if (data.type === "delta") {
-                  fullContent += data.content;
-                  updateLastAssistantMessage(fullContent, data.tokensOut);
-                } else if (data.type === "usage") {
-                  finalUsage = { tokensIn: data.tokensIn, tokensOut: data.tokensOut };
-                }
-              } catch {
-                // Genuinely malformed line, skip
-              }
+          try {
+            const data = JSON.parse(payload);
+            if (data.type === "delta") {
+              fullContent += data.content;
+              updateLastAssistantMessage(fullContent, data.tokensOut);
+            } else if (data.type === "usage") {
+              finalUsage = { tokensIn: data.tokensIn, tokensOut: data.tokensOut };
             }
+          } catch {
+            // skip malformed
           }
+        }
+      }
 
-          // Process any remaining buffer content
-          if (buffer.trim().startsWith("data: ")) {
-            try {
-              const data = JSON.parse(buffer.trim().slice(6));
-              if (data.type === "delta") {
-                fullContent += data.content;
-                updateLastAssistantMessage(fullContent, data.tokensOut);
-              } else if (data.type === "usage") {
-                finalUsage = { tokensIn: data.tokensIn, tokensOut: data.tokensOut };
-              }
-            } catch {
-              // ignore
-            }
+      if (buffer.trim().startsWith("data: ")) {
+        try {
+          const data = JSON.parse(buffer.trim().slice(6));
+          if (data.type === "delta") {
+            fullContent += data.content;
+            updateLastAssistantMessage(fullContent, data.tokensOut);
+          } else if (data.type === "usage") {
+            finalUsage = { tokensIn: data.tokensIn, tokensOut: data.tokensOut };
           }
+        } catch {
+          // ignore
+        }
+      }
 
-        if (finalUsage) {
-            finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut);
-            addEvent("tick", `Response: ${finalUsage.tokensIn} in / ${finalUsage.tokensOut} out`);
+      if (finalUsage) {
+        finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut);
+        addEvent("tick", `Response: ${finalUsage.tokensIn} in / ${finalUsage.tokensOut} out`);
 
-            // Create settlement record and send real on-chain tx
-            const msgIdx = msgIndexRef.current++;
-            const INPUT_PRICE = 2.5 / 1_000_000;
-            const OUTPUT_PRICE = 10 / 1_000_000;
-            const cost = finalUsage.tokensIn * INPUT_PRICE + finalUsage.tokensOut * OUTPUT_PRICE;
-            const settlementId = Math.random().toString(36).slice(2, 10);
-            const memo = formatMemo(sessionId, msgIdx);
+        const msgIdx = msgIndexRef.current++;
+        const INPUT_PRICE = 2.5 / 1_000_000;
+        const OUTPUT_PRICE = 10 / 1_000_000;
+        const cost = finalUsage.tokensIn * INPUT_PRICE + finalUsage.tokensOut * OUTPUT_PRICE;
+        const settlementId = Math.random().toString(36).slice(2, 10);
+        const memo = formatMemo(sessionId, msgIdx);
 
-            // Add pending settlement
-            addSettlement({
-              id: settlementId,
-              txHash: "",
-              sessionId,
-              amount: cost,
-              tokensIn: finalUsage.tokensIn,
-              tokensOut: finalUsage.tokensOut,
-              timestamp: Date.now(),
-              status: "pending",
-            });
-            addEvent("tick", `Settling $${cost.toFixed(6)} on Tempo...`);
+        addSettlement({
+          id: settlementId,
+          txHash: "",
+          sessionId,
+          amount: cost,
+          tokensIn: finalUsage.tokensIn,
+          tokensOut: finalUsage.tokensOut,
+          timestamp: Date.now(),
+          status: "pending",
+        });
+        linkSettlementToMessage(assistantMsgId, settlementId);
+        addEvent("tick", `Settling $${cost.toFixed(6)} on Tempo...`);
 
-              // Send real transaction
-              try {
-                const txHash = await settle(cost);
-                updateSettlement(settlementId, { txHash, status: "settled" });
-                addEvent("settlement_success", `$${cost.toFixed(6)} settled | tx: ${txHash.slice(0, 10)}... | memo: ${memo}`);
-              } catch (txErr) {
-                const errMsg = (txErr as Error).message;
-                updateSettlement(settlementId, { status: "failed" });
-                addEvent("settlement_fail", `Settlement failed: ${errMsg}`);
-                console.warn("[settlement]", errMsg);
-              }
-          }
+        try {
+          const txHash = await settle(cost, walletAddress || "", msgIdx);
+          updateSettlement(settlementId, { txHash, status: "settled" });
+          addEvent("settlement_success", `$${cost.toFixed(6)} settled | tx: ${txHash.slice(0, 10)}... | memo: ${memo}`);
+        } catch (txErr) {
+          const errMsg = (txErr as Error).message;
+          updateSettlement(settlementId, { status: "failed" });
+          addEvent("settlement_fail", `Settlement failed: ${errMsg}`);
+          console.warn("[settlement]", errMsg);
+        }
+      }
     } catch (err) {
       addEvent("settlement_fail", `Error: ${(err as Error).message}`);
     } finally {
@@ -226,83 +291,93 @@ export function ChatView() {
     }
   };
 
+  // Helper to find settlement for a message
+  const getSettlement = (settlementId?: string) => {
+    if (!settlementId) return null;
+    return settlements.find((s) => s.id === settlementId) ?? null;
+  };
+
   return (
     <div className="flex h-screen bg-background">
       {/* Main chat area */}
       <div className={`flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
         {/* Header */}
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
-            <div className="flex items-center gap-2">
-                <Image src="/logo-dark-copy.webp" alt="Meter" width={48} height={13} />
-              <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-                pay per thought
-              </span>
-            </div>
-            <button
-                onClick={toggleInspector}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 hover:bg-foreground/5 transition-colors"
-                title="Open inspector"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M20 21a8 8 0 0 0-16 0" />
-                </svg>
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={`text-muted-foreground transition-transform duration-200 ${inspectorOpen ? "rotate-180" : ""}`}
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
+          <div className="flex items-center gap-2">
+            <img src="/logo-dark-copy.webp" alt="Meter" width={48} height={13} />
+            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+              pay per thought
+            </span>
+          </div>
+          <button
+            onClick={toggleInspector}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 hover:bg-foreground/5 transition-colors"
+            title="Open inspector"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M20 21a8 8 0 0 0-16 0" />
+            </svg>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`text-muted-foreground transition-transform duration-200 ${inspectorOpen ? "rotate-180" : ""}`}
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
         </header>
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-2xl px-4 py-6">
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
-                    <Image src="/logo-dark-copy.webp" alt="Meter" width={84} height={23} />
-                  <span className="font-mono text-xs text-muted-foreground">
-                    every token counted. every cent settled.
-                  </span>
-                </div>
-              )}
+            {/* Disclaimer bubble */}
+            <div className="mb-4 flex justify-start">
+              <div className="flex gap-2.5 max-w-[85%] rounded-xl px-4 py-3 bg-foreground/[0.03]">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-muted-foreground/60">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span className="font-mono text-xs text-muted-foreground/60 leading-relaxed">
+                  This session will stream charges from your wallet up to ${maxSpend.toFixed(2)}.
+                  It stops automatically at the cap. You can pause or revoke anytime.
+                </span>
+              </div>
+            </div>
 
-            {messages.map((msg) => (
-              <div key={msg.id} className="mb-4">
-                <div
-                  className={`flex gap-3 ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
+            {messages.map((msg) => {
+              const settlement = msg.role === "assistant" ? getSettlement(msg.settlementId) : null;
+
+              return (
+                <div key={msg.id} className="mb-4">
                   <div
-                    className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-foreground/10 text-foreground"
-                        : "text-foreground"
+                    className={`flex gap-3 ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
-                    {msg.role === "assistant" && msg.tokensOut !== undefined && msg.tokensOut > 0 && (
-                      <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-                        {msg.tokensIn && <span>{msg.tokensIn} in</span>}
-                        <span>{msg.tokensOut} out</span>
-                        {msg.cost !== undefined && (
-                          <span>${msg.cost.toFixed(6)}</span>
-                        )}
-                      </div>
-                    )}
+                    <div
+                      className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-foreground/10 text-foreground"
+                          : "text-foreground"
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                      {/* Settlement line + expandable receipt */}
+                      {msg.role === "assistant" && settlement && (
+                        <ReceiptCard settlement={settlement} />
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {isStreaming && messages[messages.length - 1]?.content === "" && (
               <div className="mb-4 flex justify-start">

@@ -1,14 +1,18 @@
 "use client";
 
 import { useMeterStore } from "@/lib/store";
-import { txExplorerUrl } from "@/lib/tempo";
-import { useState, useEffect } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { txExplorerUrl, tempoModerato } from "@/lib/tempo";
+import { useState, useEffect, useCallback } from "react";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { createPublicClient, http, formatUnits } from "viem";
+import { PATHUSD_ADDRESS, PATHUSD_DECIMALS, TIP20_ABI } from "@/lib/tempo";
 
 export function Inspector() {
   const {
     inspectorOpen,
     setInspectorOpen,
+    inspectorTab,
+    setInspectorTab,
     sessionId,
     sessionStart,
     totalTokensIn,
@@ -19,9 +23,10 @@ export function Inspector() {
     setMaxSpend,
     settlements,
     events,
+    sessionKeyAddress,
+    revoke,
   } = useMeterStore();
 
-  const [activeTab, setActiveTab] = useState<"telemetry" | "ledger" | "permissions" | "hooks">("telemetry");
   const [elapsed, setElapsed] = useState(0);
   const { logout } = usePrivy();
 
@@ -34,52 +39,55 @@ export function Inspector() {
   }, [inspectorOpen, sessionStart]);
 
   const capRemaining = Math.max(0, maxSpend - totalCost);
-  const settlementInterval = 30; // seconds
+  const settlementInterval = 30;
   const nextSettlement = settlementInterval - (elapsed % settlementInterval);
 
-    if (!inspectorOpen) return null;
+  if (!inspectorOpen) return null;
 
-    return (
-      <>
-      {/* Backdrop — click to close */}
+  const tabs = ["wallet", "telemetry", "ledger", "permissions", "hooks"] as const;
+
+  return (
+    <>
+      {/* Backdrop */}
       <div className="fixed inset-0 z-40" onClick={() => setInspectorOpen(false)} />
       <div className="fixed right-0 top-0 h-screen w-[380px] border-l border-border bg-card flex flex-col z-50">
-      {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-border px-4">
-        <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
-          Session Meter Console
-        </span>
-        <button
-          onClick={() => setInspectorOpen(false)}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-border">
-        {(["telemetry", "ledger", "permissions", "hooks"] as const).map((tab) => (
+        {/* Header */}
+        <div className="flex h-12 items-center justify-between border-b border-border px-4">
+          <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
+            Session Meter Console
+          </span>
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors ${
-              activeTab === tab
-                ? "text-foreground border-b border-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            onClick={() => setInspectorOpen(false)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            {tab}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
-        ))}
-      </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-border">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setInspectorTab(tab)}
+              className={`flex-1 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                inspectorTab === tab
+                  ? "text-foreground border-b border-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {activeTab === "telemetry" && (
+          {inspectorTab === "wallet" && <WalletTab />}
+          {inspectorTab === "telemetry" && (
             <TelemetryTab
               sessionId={sessionId}
               elapsed={elapsed}
@@ -92,16 +100,18 @@ export function Inspector() {
               nextSettlement={nextSettlement}
             />
           )}
-          {activeTab === "ledger" && <LedgerTab settlements={settlements} />}
-          {activeTab === "permissions" && (
+          {inspectorTab === "ledger" && <LedgerTab settlements={settlements} />}
+          {inspectorTab === "permissions" && (
             <PermissionsTab
               sessionId={sessionId}
               maxSpend={maxSpend}
               setMaxSpend={setMaxSpend}
               capRemaining={capRemaining}
+              sessionKeyAddress={sessionKeyAddress}
+              onRevoke={revoke}
             />
           )}
-          {activeTab === "hooks" && <HooksTab events={events} />}
+          {inspectorTab === "hooks" && <HooksTab events={events} />}
         </div>
 
         {/* Sign out */}
@@ -113,7 +123,7 @@ export function Inspector() {
             Sign Out
           </button>
         </div>
-    </div>
+      </div>
     </>
   );
 }
@@ -127,6 +137,148 @@ function StatRow({ label, value, mono = true }: { label: string; value: string; 
   );
 }
 
+/* ─── WALLET TAB ─── */
+function WalletTab() {
+  const { wallets } = useWallets();
+  const connectedWallet = wallets.find((w) => w.walletClientType !== "privy") ?? wallets[0];
+  const address = connectedWallet?.address;
+  const [balance, setBalance] = useState<string | null>(null);
+  const [gasBalance, setGasBalance] = useState<string | null>(null);
+  const [faucetLoading, setFaucetLoading] = useState(false);
+  const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
+  const addEvent = useMeterStore((s) => s.addEvent);
+
+  const fetchBalances = useCallback(async () => {
+    if (!address) return;
+      try {
+        const client = createPublicClient({ chain: tempoModerato, transport: http() });
+        const raw = await client.readContract({
+          address: PATHUSD_ADDRESS,
+          abi: TIP20_ABI,
+          functionName: "balanceOf",
+          args: [address as `0x${string}`],
+        });
+        const num = Number(formatUnits(raw as bigint, PATHUSD_DECIMALS));
+        setBalance(num.toFixed(2));
+        setGasBalance(num.toFixed(2)); // On Tempo, pathUSD pays for gas too
+      } catch {
+        setBalance("0.00");
+        setGasBalance("0.00");
+      }
+  }, [address]);
+
+  useEffect(() => {
+    fetchBalances();
+    const interval = setInterval(fetchBalances, 10000);
+    return () => clearInterval(interval);
+  }, [fetchBalances]);
+
+  const handleFaucet = async () => {
+    if (!address) return;
+    setFaucetLoading(true);
+    setFaucetMsg(null);
+    try {
+      const res = await fetch("/api/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFaucetMsg("Tokens sent!");
+        addEvent("tick", "Faucet: testnet tokens received");
+        setTimeout(fetchBalances, 2000);
+      } else {
+        setFaucetMsg(data.error || "Faucet failed");
+      }
+    } catch {
+      setFaucetMsg("Faucet request failed");
+    } finally {
+      setFaucetLoading(false);
+    }
+  };
+
+  const handleAddToWallet = async () => {
+    if (!connectedWallet) return;
+    try {
+      const provider = await connectedWallet.getEthereumProvider();
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: `0x${tempoModerato.id.toString(16)}`,
+            chainName: tempoModerato.name,
+            nativeCurrency: tempoModerato.nativeCurrency,
+            rpcUrls: [tempoModerato.rpcUrls.default.http[0]],
+            blockExplorerUrls: [tempoModerato.blockExplorers.default.url],
+          },
+        ],
+      });
+    } catch {
+      // user rejected or already added
+    }
+  };
+
+    return (
+      <div className="flex flex-col gap-4">
+        {/* Connected wallet address with green dot */}
+        <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2.5">
+          <span className="h-2 w-2 rounded-full bg-green-400 shrink-0" />
+          <span className="font-mono text-xs text-foreground truncate">{address || "—"}</span>
+        </div>
+
+        {/* Tempo Balances */}
+        <div>
+          <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+            Tempo Balances
+          </div>
+          <StatRow label="pathUSD" value={balance !== null ? `$${balance}` : "..."} />
+          <StatRow label="Gas (pathUSD)" value={gasBalance !== null ? `$${gasBalance}` : "..."} />
+        </div>
+
+        <div className="h-px bg-border" />
+
+        {/* Actions */}
+        <div>
+          <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+            Actions
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleAddToWallet}
+              className="w-full rounded-lg border border-border py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5"
+            >
+              Add Tempo to Wallet
+            </button>
+            <button
+              onClick={handleFaucet}
+              disabled={faucetLoading}
+              className="w-full rounded-lg border border-border py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5 disabled:opacity-40"
+            >
+              {faucetLoading ? "Requesting..." : "Get Testnet Tokens"}
+            </button>
+            {faucetMsg && (
+              <span className="font-mono text-[10px] text-muted-foreground/60 text-center">{faucetMsg}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="h-px bg-border" />
+
+        {/* Network */}
+        <div>
+          <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+            Network
+          </div>
+          <StatRow label="Chain" value={tempoModerato.name} />
+          <StatRow label="Chain ID" value={tempoModerato.id.toString()} />
+          <StatRow label="RPC" value={tempoModerato.rpcUrls.default.http[0].replace("https://", "")} />
+        </div>
+      </div>
+    );
+}
+
+/* ─── TELEMETRY TAB ─── */
 function TelemetryTab({
   sessionId,
   elapsed,
@@ -213,6 +365,7 @@ function TelemetryTab({
   );
 }
 
+/* ─── LEDGER TAB ─── */
 function LedgerTab({ settlements }: { settlements: ReturnType<typeof useMeterStore.getState>["settlements"] }) {
   if (settlements.length === 0) {
     return (
@@ -247,22 +400,22 @@ function LedgerTab({ settlements }: { settlements: ReturnType<typeof useMeterSto
           </div>
           <StatRow label="Amount" value={`$${s.amount.toFixed(6)}`} />
           <StatRow label="Tokens" value={`${s.tokensIn} in / ${s.tokensOut} out`} />
-            <div className="mt-1">
-              {s.txHash ? (
-                <a
-                  href={txExplorerUrl(s.txHash)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[9px] text-blue-400/70 hover:text-blue-400 font-mono break-all transition-colors"
-                >
-                  tx: {s.txHash}
-                </a>
-              ) : (
-                <span className="text-[9px] text-muted-foreground/40 font-mono">
-                  tx: awaiting...
-                </span>
-              )}
-            </div>
+          <div className="mt-1">
+            {s.txHash ? (
+              <a
+                href={txExplorerUrl(s.txHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[9px] text-blue-400/70 hover:text-blue-400 font-mono break-all transition-colors"
+              >
+                tx: {s.txHash}
+              </a>
+            ) : (
+              <span className="text-[9px] text-muted-foreground/40 font-mono">
+                tx: awaiting...
+              </span>
+            )}
+          </div>
           <div className="mt-0.5">
             <span className="text-[9px] text-muted-foreground/40 font-mono">
               memo: meter:{s.sessionId}
@@ -274,23 +427,29 @@ function LedgerTab({ settlements }: { settlements: ReturnType<typeof useMeterSto
   );
 }
 
+/* ─── PERMISSIONS TAB ─── */
 function PermissionsTab({
   sessionId,
   maxSpend,
   setMaxSpend,
   capRemaining,
+  sessionKeyAddress,
+  onRevoke,
 }: {
   sessionId: string;
   maxSpend: number;
   setMaxSpend: (v: number) => void;
   capRemaining: number;
+  sessionKeyAddress: string | null;
+  onRevoke: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Access Key
+          Session Key
         </div>
+        <StatRow label="Address" value={sessionKeyAddress ? `${sessionKeyAddress.slice(0, 6)}...${sessionKeyAddress.slice(-4)}` : "—"} />
         <StatRow label="Session" value={sessionId} />
         <StatRow label="Scope" value="chat:read, chat:write" />
       </div>
@@ -322,13 +481,17 @@ function PermissionsTab({
 
       <div className="h-px bg-border" />
 
-      <button className="w-full rounded-lg border border-red-400/20 py-2 font-mono text-[11px] text-red-400 transition-colors hover:bg-red-400/10">
+      <button
+        onClick={onRevoke}
+        className="w-full rounded-lg border border-red-400/20 py-2 font-mono text-[11px] text-red-400 transition-colors hover:bg-red-400/10"
+      >
         Revoke Session
       </button>
     </div>
   );
 }
 
+/* ─── HOOKS TAB ─── */
 function HooksTab({ events }: { events: ReturnType<typeof useMeterStore.getState>["events"] }) {
   if (events.length === 0) {
     return (
