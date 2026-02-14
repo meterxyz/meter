@@ -13,7 +13,7 @@
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-15-black?logo=next.js" alt="Next.js 15" /></a>
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5-blue?logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://tempo.xyz"><img src="https://img.shields.io/badge/Tempo-Testnet-purple" alt="Tempo" /></a>
-  <a href="https://canteenapp-tempo.notion.site"><img src="https://img.shields.io/badge/Tempo%20Hackathon-2025-orange" alt="Tempo Hackathon" /></a>
+  <a href="https://canteenapp-tempo.notion.site"><img src="https://img.shields.io/badge/Tempo%20Hackathon-2026-orange" alt="Tempo Hackathon" /></a>
 </p>
 
 <p align="center">
