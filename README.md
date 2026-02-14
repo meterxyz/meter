@@ -76,7 +76,7 @@ A live cost ticker runs as the AI responds. Each message is settled as a blockch
 - pathUSD as currency. 6-decimal stablecoin (same as USDC). Users think in dollars, settle in dollars. No price feeds, no volatility, no conversion.
 - Ephemeral session keys. One wallet signature authorizes the session. Every payment after that is signed locally in browser memory. Zero popups. Key destroyed on tab close.
 - Per-message settlement. Every response is settled individually with a verifiable tx hash. No batching, no reconciliation. Transparency is the product.
-- OpenRouter for models. One integration, every frontier model. Published per-token pricing with a transparent 10% Meter markup.
+- OpenRouter for models. One integration, every frontier model. Published per-token pricing with a small Meter markup.
 - Private by default. No email, no account, no KYC. Connect wallet, chat fully encrypted. Your address is your identity.
 - Fully open source (MIT). Non-custodial system requires auditable code. Users can verify, fork, or self-host.
 
