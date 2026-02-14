@@ -1,15 +1,17 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
 
-const openrouter = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-});
+function getOpenRouterClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+  });
+}
 
 export async function POST(req: NextRequest) {
   const { messages, model } = await req.json();
 
-  const response = await openrouter.chat.completions.create({
+  const response = await getOpenRouterClient().chat.completions.create({
     model: model || "anthropic/claude-sonnet-4-5-20250929",
     messages: messages.map((m: { role: string; content: string }) => ({
       role: m.role,
