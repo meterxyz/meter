@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // GET — usage records for a wallet
 export async function GET(req: NextRequest) {
+  const supabase = getSupabase();
   const walletAddress = req.nextUrl.searchParams.get("walletAddress");
   if (!walletAddress) {
     return NextResponse.json({ error: "walletAddress required" }, { status: 400 });
