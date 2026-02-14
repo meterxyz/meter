@@ -3,10 +3,12 @@
 import { useRef, useEffect, useState } from "react";
 import { useMeterStore, Settlement } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
+import { ModelPicker } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { useWallets } from "@privy-io/react-auth";
 import { formatMemo, txExplorerUrl } from "@/lib/tempo";
 import { useSettlement } from "@/hooks/use-settlement";
+import { getModel } from "@/lib/models";
 
 /* ─── Receipt card (expandable) ────────────────────────────────── */
 function ReceiptCard({ settlement }: { settlement: Settlement }) {
@@ -116,6 +118,7 @@ export function ChatView() {
     addSettlement,
     updateSettlement,
     linkSettlementToMessage,
+    selectedModelId,
   } = useMeterStore();
 
   const { wallets } = useWallets();
@@ -186,7 +189,7 @@ export function ChatView() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: allMessages }),
+        body: JSON.stringify({ messages: allMessages, model: selectedModelId }),
       });
 
       if (!res.ok) throw new Error("Chat API failed");
@@ -247,9 +250,8 @@ export function ChatView() {
         addEvent("tick", `Response: ${finalUsage.tokensIn} in / ${finalUsage.tokensOut} out`);
 
         const msgIdx = msgIndexRef.current++;
-        const INPUT_PRICE = 2.5 / 1_000_000;
-        const OUTPUT_PRICE = 10 / 1_000_000;
-        const cost = finalUsage.tokensIn * INPUT_PRICE + finalUsage.tokensOut * OUTPUT_PRICE;
+        const currentModel = getModel(selectedModelId);
+        const cost = finalUsage.tokensIn * currentModel.inputPrice + finalUsage.tokensOut * currentModel.outputPrice;
         const settlementId = Math.random().toString(36).slice(2, 10);
         const memo = formatMemo(sessionId, msgIdx);
 
@@ -395,6 +397,7 @@ export function ChatView() {
         <div className="border-t border-border p-4">
           <div className="mx-auto max-w-2xl">
             <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2">
+              <ModelPicker />
               <textarea
                 ref={inputRef}
                 onKeyDown={handleKeyDown}

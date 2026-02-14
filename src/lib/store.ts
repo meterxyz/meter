@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_MODEL, getModel } from "@/lib/models";
 
 export interface ChatMessage {
   id: string;
@@ -29,9 +30,7 @@ export interface MeterEvent {
   timestamp: number;
 }
 
-// Pricing: GPT-4o — $2.50/1M input, $10/1M output
-const INPUT_PRICE_PER_TOKEN = 2.5 / 1_000_000;
-const OUTPUT_PRICE_PER_TOKEN = 10 / 1_000_000;
+// Pricing is now dynamic per model — see lib/models.ts
 
 interface MeterState {
   // Session
@@ -42,6 +41,9 @@ interface MeterState {
   sessionKeyPrivate: string | null;  // hex private key
   sessionKeyAddress: string | null;  // derived address
   authorized: boolean;               // user has approved
+
+  // Model
+  selectedModelId: string;
 
   // Chat
   messages: ChatMessage[];
@@ -76,6 +78,7 @@ interface MeterState {
   updateSettlement: (id: string, updates: Partial<Settlement>) => void;
   addEvent: (type: MeterEvent["type"], message: string) => void;
   setMaxSpend: (v: number) => void;
+  setSelectedModelId: (id: string) => void;
   linkSettlementToMessage: (messageId: string, settlementId: string) => void;
   setSessionKey: (privateKey: string, address: string) => void;
   setAuthorized: (v: boolean) => void;
@@ -99,6 +102,8 @@ export const useMeterStore = create<MeterState>((set, get) => ({
   sessionKeyAddress: null,
   authorized: false,
 
+  selectedModelId: DEFAULT_MODEL.id,
+
   messages: [],
   isStreaming: false,
 
@@ -118,13 +123,14 @@ export const useMeterStore = create<MeterState>((set, get) => ({
 
   updateLastAssistantMessage: (content, tokensOut) =>
     set((s) => {
+      const model = getModel(s.selectedModelId);
       const msgs = [...s.messages];
       const last = msgs[msgs.length - 1];
       if (last && last.role === "assistant") {
         msgs[msgs.length - 1] = { ...last, content, tokensOut };
       }
       const newTotalOut = s.totalTokensOut + (tokensOut - (last?.tokensOut || 0));
-      const costDelta = (tokensOut - (last?.tokensOut || 0)) * OUTPUT_PRICE_PER_TOKEN;
+      const costDelta = (tokensOut - (last?.tokensOut || 0)) * model.outputPrice;
       const elapsed = (Date.now() - s.sessionStart) / 1000;
       return {
         messages: msgs,
@@ -136,11 +142,12 @@ export const useMeterStore = create<MeterState>((set, get) => ({
 
   finalizeResponse: (tokensIn, tokensOut) =>
     set((s) => {
-      const inputCost = tokensIn * INPUT_PRICE_PER_TOKEN;
+      const model = getModel(s.selectedModelId);
+      const inputCost = tokensIn * model.inputPrice;
       const msgs = [...s.messages];
       const last = msgs[msgs.length - 1];
       if (last && last.role === "assistant") {
-        const totalMsgCost = inputCost + tokensOut * OUTPUT_PRICE_PER_TOKEN;
+        const totalMsgCost = inputCost + tokensOut * model.outputPrice;
         msgs[msgs.length - 1] = { ...last, tokensIn, tokensOut, cost: totalMsgCost };
       }
       return {
@@ -172,6 +179,7 @@ export const useMeterStore = create<MeterState>((set, get) => ({
     })),
 
   setMaxSpend: (v) => set({ maxSpend: v }),
+  setSelectedModelId: (id) => set({ selectedModelId: id }),
 
   linkSettlementToMessage: (messageId, settlementId) =>
     set((s) => ({
