@@ -13,7 +13,7 @@
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-15-black?logo=next.js" alt="Next.js 15" /></a>
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5-blue?logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://tempo.xyz"><img src="https://img.shields.io/badge/Tempo-Testnet-purple" alt="Tempo" /></a>
-  <a href="https://hack.tempo.xyz"><img src="https://img.shields.io/badge/Tempo%20Hackathon-2025-orange" alt="Tempo Hackathon" /></a>
+  <a href="https://canteenapp-tempo.notion.site"><img src="https://img.shields.io/badge/Tempo%20Hackathon-2025-orange" alt="Tempo Hackathon" /></a>
 </p>
 
 <p align="center">
@@ -196,7 +196,7 @@ Meter settles on [Tempo](https://tempo.xyz), a high-throughput EVM chain with su
 
 ## Pricing
 
-Pay-per-token with a 10% markup on OpenRouter base rates. A typical message costs fractions of a cent.
+Pay-per-token with a small markup on OpenRouter base rates. A typical message costs fractions of a cent.
 
 | Model | Input (per 1M) | Output (per 1M) | ~Per Message |
 |-------|----------------|-----------------|-------------|
@@ -222,5 +222,5 @@ MIT. See [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  Built for the <a href="https://hack.tempo.xyz">Tempo Hackathon</a>
+  Built for the <a href="https://canteenapp-tempo.notion.site">Tempo Hackathon</a>
 </p>
