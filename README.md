@@ -33,7 +33,7 @@ A live cost ticker runs as the AI responds. Each message is settled as a blockch
 ## How It Works
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+┌────────────-─┐     ┌─────────────┐     ┌───────────-──┐
 │   Browser    │     │   Server    │     │   Tempo      │
 │              │     │             │     │   Network    │
 │  Connect     │────▶│             │     │              │
@@ -43,14 +43,14 @@ A live cost ticker runs as the AI responds. Each message is settled as a blockch
 │  Session     │     │             │     │  pathUSD     │
 │              │     │             │     │              │
 │  Send        │────▶│  Stream AI  │     │              │
-│  Message     │◀─sse│  (OpenRouter)│    │              │
+│  Message     │◀─sse│ (OpenRouter)│     │              │
 │              │     │             │     │              │
 │  Meter       │     │  Report     │     │              │
 │  ticks...    │◀────│  usage      │     │              │
 │              │     │             │     │              │
 │  Session key │─tx─▶│             │────▶│  Settle      │
 │  settles     │     │             │     │  on-chain    │
-└─────────────┘     └─────────────┘     └─────────────┘
+└─────────-────┘     └─────────────┘     └────────-─────┘
 ```
 
 1. **Connect** — User connects wallet via Privy (MetaMask, WalletConnect, etc.)
