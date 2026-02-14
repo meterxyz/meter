@@ -245,8 +245,14 @@ function LedgerTab({ settlements }: { settlements: ReturnType<typeof useMeterSto
               {new Date(s.timestamp).toLocaleTimeString()}
             </span>
           </div>
-          <StatRow label="Amount" value={`$${s.amount.toFixed(6)}`} />
-          <StatRow label="Tokens" value={`${s.tokensIn} in / ${s.tokensOut} out`} />
+            {s.amount > 0 ? (
+              <>
+                <StatRow label="Amount" value={`$${s.amount.toFixed(6)}`} />
+                <StatRow label="Tokens" value={`${s.tokensIn} in / ${s.tokensOut} out`} />
+              </>
+            ) : (
+              <StatRow label="Type" value="Faucet funding" />
+            )}
             <div className="mt-1">
               {s.txHash ? (
                 <a
