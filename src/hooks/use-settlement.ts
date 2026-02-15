@@ -23,7 +23,7 @@ export function useSettlement() {
   const sessionKeyAddress = useMeterStore((s) => s.sessionKeyAddress);
 
   const settle = useCallback(
-    async (amountUsd: number, _ownerAddress: string, msgIndex?: number): Promise<string> => {
+    async (amountUsd: number, sessionId: string, msgIndex?: number): Promise<string> => {
       if (!sessionKeyPrivate) {
         throw new Error("No session key — authorize first");
       }
@@ -36,7 +36,7 @@ export function useSettlement() {
       });
 
       const amount = dollarToUnits(amountUsd);
-      const memo = formatMemo("session", msgIndex ?? 0) as `0x${string}`;
+      const memo = formatMemo(sessionId, msgIndex ?? 0) as `0x${string}`;
 
       try {
         // Use transferWithMemo: session key transfers from its own balance

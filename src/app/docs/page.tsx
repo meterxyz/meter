@@ -398,8 +398,8 @@ SUPABASE_SERVICE_ROLE_KEY=ey...           # Supabase service role key`}</CodeBlo
 
       <p className="text-[15px] text-muted-foreground leading-relaxed mb-6">
         Open{" "}
-        <a href="http://localhost:3000" className="text-foreground underline">
-          http://localhost:3000
+        <a href="https://getmeter.xyz" className="text-foreground underline">
+          getmeter.xyz
         </a>
         , connect your wallet, authorize a session, and start chatting. Your
         wallet is funded automatically from the testnet faucet on first connect.
@@ -916,25 +916,6 @@ data: {"type":"done"}`}</CodeBlock>
 Content-Type: application/json
 
 { "address": "0x..." }`}</CodeBlock>
-
-      <h3 className="text-base font-semibold text-foreground mt-6 mb-3">
-        POST /api/tx
-      </h3>
-      <p className="text-[15px] text-muted-foreground leading-relaxed mb-4">
-        Record a settlement transaction in the database.
-      </p>
-      <CodeBlock>{`POST /api/tx
-Content-Type: application/json
-
-{
-  "txHash": "0x...",
-  "walletAddress": "0x...",
-  "model": "anthropic/claude-opus-4.6",
-  "tokensIn": 150,
-  "tokensOut": 420,
-  "cost": 0.0058,
-  "sessionId": "ses_..."
-}`}</CodeBlock>
 
       <NavFooter currentId="api-reference" onNavigate={onNavigate} />
     </div>

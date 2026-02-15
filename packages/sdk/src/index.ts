@@ -13,7 +13,7 @@ export interface ChatMessage {
 export interface ChatOptions {
   /** Array of chat messages */
   messages: ChatMessage[];
-  /** OpenRouter model ID (e.g. "openai/gpt-4o"). Default: "anthropic/claude-sonnet-4-5-20250929" */
+  /** OpenRouter model ID (e.g. "anthropic/claude-opus-4.6"). Default: "anthropic/claude-opus-4.6" */
   model?: string;
 }
 
