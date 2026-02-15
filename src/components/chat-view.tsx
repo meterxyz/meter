@@ -192,7 +192,15 @@ export function ChatView() {
         body: JSON.stringify({ messages: allMessages, model: selectedModelId }),
       });
 
-      if (!res.ok) throw new Error("Chat API failed");
+      if (!res.ok) {
+        const errBody = await res.text();
+        let errMsg = `Chat API failed (${res.status})`;
+        try {
+          const parsed = JSON.parse(errBody);
+          if (parsed.error) errMsg = parsed.error;
+        } catch { /* use default */ }
+        throw new Error(errMsg);
+      }
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No reader");
