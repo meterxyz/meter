@@ -214,7 +214,7 @@ Pay-per-token with a small markup on OpenRouter base rates. A typical message co
 | GPT-4o | $2.75 | $11.00 | ~$0.006 |
 | Kimi K2 | $0.66 | $2.64 | ~$0.002 |
 | DeepSeek V3 | $0.33 | $0.97 | ~$0.0006 |
-| Gemini Flash | $0.17 | $0.66 | ~$0.0004 |
+| Gemini Flash | $0.33 | $2.75 | ~$0.002 |
 
 ## Contributing
 

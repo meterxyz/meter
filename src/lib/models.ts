@@ -9,7 +9,7 @@ export interface ModelConfig {
 
 export const MODELS: ModelConfig[] = [
   {
-    id: "anthropic/claude-sonnet-4-5-20250929",
+    id: "anthropic/claude-sonnet-4.5",
     name: "Claude Sonnet",
     provider: "Anthropic",
     color: "#D97757",
@@ -25,12 +25,12 @@ export const MODELS: ModelConfig[] = [
     outputPrice: 10 / 1_000_000,
   },
   {
-    id: "google/gemini-2.5-flash-preview-04-17",
+    id: "google/gemini-2.5-flash",
     name: "Gemini Flash",
     provider: "Google",
     color: "#4285F4",
-    inputPrice: 0.15 / 1_000_000,
-    outputPrice: 0.60 / 1_000_000,
+    inputPrice: 0.30 / 1_000_000,
+    outputPrice: 2.50 / 1_000_000,
   },
   {
     id: "deepseek/deepseek-chat-v3-0324",

@@ -496,7 +496,7 @@ function PricingSection({ onNavigate }: SectionProps) {
               ["GPT-4o", "$2.75", "$11.00", "~$0.006"],
               ["Kimi K2", "$0.66", "$2.64", "~$0.002"],
               ["DeepSeek V3", "$0.33", "$0.97", "~$0.0006"],
-              ["Gemini Flash", "$0.17", "$0.66", "~$0.0004"],
+              ["Gemini Flash", "$0.33", "$2.75", "~$0.002"],
             ].map(([model, input, output, perMsg]) => (
               <tr
                 key={model}
@@ -853,7 +853,7 @@ function ApiReferenceSection({ onNavigate }: SectionProps) {
                 string
               </td>
               <td className="px-4 py-2.5 text-muted-foreground">
-                OpenRouter model ID. Default: anthropic/claude-sonnet-4-5-20250929
+                OpenRouter model ID. Default: anthropic/claude-sonnet-4.5
               </td>
             </tr>
             <tr className="border-b border-white/[0.04]">
