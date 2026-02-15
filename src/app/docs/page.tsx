@@ -256,7 +256,7 @@ function IntroductionSection({ onNavigate }: SectionProps) {
         </li>
         <li>
           <strong className="text-foreground">Multi-model</strong> — access
-          GPT-4o, Claude, Llama, DeepSeek, Gemini and more via OpenRouter
+          Claude, GPT-4o, Gemini, DeepSeek, Kimi and more via OpenRouter
         </li>
         <li>
           <strong className="text-foreground">Crypto-native privacy</strong> —
@@ -285,7 +285,7 @@ function HowItWorksSection({ onNavigate }: SectionProps) {
       <ul className="list-disc list-outside ml-5 text-[15px] text-muted-foreground leading-relaxed space-y-2 mb-8">
         <li>
           <strong className="text-foreground">OpenRouter</strong> — routes to
-          the best AI models (GPT-4o, Claude, Llama, etc.) and reports token
+          the best AI models (Claude, GPT-4o, Gemini, DeepSeek, Kimi, etc.) and reports token
           usage
         </li>
         <li>
@@ -380,7 +380,7 @@ function QuickstartSection({ onNavigate }: SectionProps) {
         Install
       </h2>
       <CodeBlock>{`git clone https://github.com/meterxyz/meter
-cd meter-chat
+cd meter
 cp .env.example .env.local
 bun install
 bun dev`}</CodeBlock>
@@ -389,10 +389,12 @@ bun dev`}</CodeBlock>
         Environment
       </h2>
       <CodeBlock>{`# .env.local
-OPENAI_API_KEY=sk-or-...          # OpenRouter API key
-NEXT_PUBLIC_PRIVY_APP_ID=cm...    # Privy app ID
-SUPABASE_URL=https://...          # Supabase project URL
-SUPABASE_SERVICE_ROLE_KEY=ey...   # Supabase service role key`}</CodeBlock>
+OPENROUTER_API_KEY=sk-or-...              # OpenRouter API key
+NEXT_PUBLIC_PRIVY_APP_ID=cm...            # Privy app ID (chat)
+NEXT_PUBLIC_PRIVY_CONSOLE_APP_ID=cm...    # Privy app ID (dev console)
+NEXT_PUBLIC_SUPABASE_URL=https://...      # Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=ey...       # Supabase anon key
+SUPABASE_SERVICE_ROLE_KEY=ey...           # Supabase service role key`}</CodeBlock>
 
       <p className="text-[15px] text-muted-foreground leading-relaxed mb-6">
         Open{" "}
@@ -490,13 +492,11 @@ function PricingSection({ onNavigate }: SectionProps) {
           </thead>
           <tbody className="text-[13px]">
             {[
-              ["GPT-4o mini", "$0.17", "$0.66", "~$0.0004"],
-              ["GPT-4o", "$2.75", "$11.00", "~$0.007"],
-              ["Claude 3.5 Sonnet", "$3.30", "$16.50", "~$0.01"],
-              ["Claude 3.5 Haiku", "$0.88", "$4.40", "~$0.003"],
-              ["Llama 3.3 70B", "$0.13", "$0.44", "~$0.0003"],
-              ["DeepSeek V3", "$0.15", "$0.46", "~$0.0003"],
-              ["Gemini 2.0 Flash", "$0.11", "$0.44", "~$0.0003"],
+              ["Claude Sonnet", "$3.30", "$16.50", "~$0.009"],
+              ["GPT-4o", "$2.75", "$11.00", "~$0.006"],
+              ["Kimi K2", "$0.66", "$2.64", "~$0.002"],
+              ["DeepSeek V3", "$0.33", "$0.97", "~$0.0006"],
+              ["Gemini Flash", "$0.17", "$0.66", "~$0.0004"],
             ].map(([model, input, output, perMsg]) => (
               <tr
                 key={model}
@@ -752,7 +752,7 @@ function PlatformSection({ onNavigate }: SectionProps) {
       <ul className="list-disc list-outside ml-5 text-[15px] text-muted-foreground leading-relaxed space-y-2 mb-8">
         <li>
           <strong className="text-foreground">Multi-model</strong> — access
-          GPT-4o, Claude, Llama, DeepSeek, Gemini through one API
+          Claude, GPT-4o, Gemini, DeepSeek, Kimi through one API
         </li>
         <li>
           <strong className="text-foreground">Pay-as-you-go</strong> — your
@@ -809,7 +809,7 @@ function ApiReferenceSection({ onNavigate }: SectionProps) {
         Stream an AI response. Authenticate with your API key in the
         Authorization header.
       </p>
-      <CodeBlock>{`curl -N https://meter.chat/api/v1/chat \\
+      <CodeBlock>{`curl -N https://getmeter.xyz/api/v1/chat \\
   -H "Authorization: Bearer mk_..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -853,7 +853,7 @@ function ApiReferenceSection({ onNavigate }: SectionProps) {
                 string
               </td>
               <td className="px-4 py-2.5 text-muted-foreground">
-                OpenRouter model ID. Default: openai/gpt-4o
+                OpenRouter model ID. Default: anthropic/claude-sonnet-4-5-20250929
               </td>
             </tr>
             <tr className="border-b border-white/[0.04]">
@@ -929,7 +929,7 @@ Content-Type: application/json
 {
   "txHash": "0x...",
   "walletAddress": "0x...",
-  "model": "gpt-4o",
+  "model": "openai/gpt-4o",
   "tokensIn": 150,
   "tokensOut": 420,
   "cost": 0.0058,
@@ -953,7 +953,7 @@ function SdkSection({ onNavigate }: SectionProps) {
       <h2 className="text-xl font-semibold text-foreground mt-8 mb-4">
         Install
       </h2>
-      <CodeBlock>{`npm install @meter-ai/sdk`}</CodeBlock>
+      <CodeBlock>{`npm install @meterxyz/sdk`}</CodeBlock>
       <p className="text-[15px] text-muted-foreground leading-relaxed mb-6">
         Or just copy the snippet below — it&apos;s a single fetch call.
       </p>
@@ -961,7 +961,7 @@ function SdkSection({ onNavigate }: SectionProps) {
       <h2 className="text-xl font-semibold text-foreground mt-8 mb-4">
         Node.js / TypeScript
       </h2>
-      <CodeBlock>{`const response = await fetch("https://meter.chat/api/v1/chat", {
+      <CodeBlock>{`const response = await fetch("https://getmeter.xyz/api/v1/chat", {
   method: "POST",
   headers: {
     "Authorization": "Bearer mk_your_api_key",
@@ -1000,7 +1000,7 @@ while (true) {
       <CodeBlock>{`import requests
 
 response = requests.post(
-    "https://meter.chat/api/v1/chat",
+    "https://getmeter.xyz/api/v1/chat",
     headers={
         "Authorization": "Bearer mk_your_api_key",
         "Content-Type": "application/json",
@@ -1020,7 +1020,7 @@ for line in response.iter_lines():
             print(data["content"], end="", flush=True)`}</CodeBlock>
 
       <h2 className="text-xl font-semibold text-foreground mt-8 mb-4">cURL</h2>
-      <CodeBlock>{`curl -N https://meter.chat/api/v1/chat \\
+      <CodeBlock>{`curl -N https://getmeter.xyz/api/v1/chat \\
   -H "Authorization: Bearer mk_..." \\
   -H "Content-Type: application/json" \\
   -d '{"messages":[{"role":"user","content":"Hi"}]}'`}</CodeBlock>
@@ -1034,7 +1034,7 @@ for line in response.iter_lines():
       </p>
       <CodeBlock>{`Integrate Meter AI into this app. Use the following API:
 
-POST https://meter.chat/api/v1/chat
+POST https://getmeter.xyz/api/v1/chat
 Authorization: Bearer mk_YOUR_KEY
 Content-Type: application/json
 
@@ -1062,10 +1062,12 @@ function ConfigurationSection({ onNavigate }: SectionProps) {
         Environment Variables
       </h2>
       <CodeBlock>{`# Required
-OPENAI_API_KEY=               # OpenRouter API key (sk-or-...)
-NEXT_PUBLIC_PRIVY_APP_ID=     # Privy app ID for wallet auth
-SUPABASE_URL=                 # Supabase project URL
-SUPABASE_SERVICE_ROLE_KEY=    # Supabase service role key`}</CodeBlock>
+OPENROUTER_API_KEY=                       # OpenRouter API key (sk-or-...)
+NEXT_PUBLIC_PRIVY_APP_ID=                 # Privy app ID for wallet auth
+NEXT_PUBLIC_PRIVY_CONSOLE_APP_ID=         # Privy app ID for dev console
+NEXT_PUBLIC_SUPABASE_URL=                 # Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=            # Supabase anon key
+SUPABASE_SERVICE_ROLE_KEY=                # Supabase service role key`}</CodeBlock>
 
       <h2 className="text-xl font-semibold text-foreground mt-10 mb-4">
         Chain Configuration
@@ -1086,15 +1088,11 @@ Explorer:    https://explore.tempo.xyz`}</CodeBlock>
         Pricing
       </h2>
       <p className="text-[15px] text-muted-foreground leading-relaxed mb-6">
-        Token rates are configured in{" "}
+        Token rates are configured per model in{" "}
         <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[13px]">
-          src/app/api/chat/route.ts
-        </code>{" "}
-        and{" "}
-        <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[13px]">
-          src/lib/store.ts
+          src/lib/models.ts
         </code>
-        . The default is GPT-4o pricing with 10% markup.
+        . Prices include a 10% Meter markup on OpenRouter base rates.
       </p>
 
       <NavFooter currentId="configuration" onNavigate={onNavigate} />
