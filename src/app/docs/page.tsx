@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -94,6 +94,12 @@ function NavFooter({
 
 export default function DocsPage() {
   const [active, setActive] = useState("introduction");
+  const mainRef = useRef<HTMLElement>(null);
+
+  const navigate = useCallback((id: string) => {
+    setActive(id);
+    mainRef.current?.scrollTo(0, 0);
+  }, []);
 
   return (
     <div className="flex h-screen bg-background">
@@ -122,7 +128,7 @@ export default function DocsPage() {
                 {section.items.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setActive(item.id)}
+                    onClick={() => navigate(item.id)}
                     className={`w-full text-left px-3 py-1.5 rounded-md text-[13px] transition-colors ${
                       active === item.id
                         ? "bg-white/[0.08] text-foreground font-medium"
@@ -161,44 +167,44 @@ export default function DocsPage() {
       </aside>
 
       {/* Main content */}
-        <main className="flex-1 overflow-y-auto px-10 py-14 lg:px-20">
+        <main ref={mainRef} className="flex-1 overflow-y-auto px-10 py-14 lg:px-20">
           <div className="max-w-2xl">
           {active === "introduction" && (
-            <IntroductionSection onNavigate={setActive} />
+            <IntroductionSection onNavigate={navigate} />
           )}
           {active === "how-it-works" && (
-            <HowItWorksSection onNavigate={setActive} />
+            <HowItWorksSection onNavigate={navigate} />
           )}
           {active === "quickstart" && (
-            <QuickstartSection onNavigate={setActive} />
+            <QuickstartSection onNavigate={navigate} />
           )}
           {active === "pay-per-thought" && (
-            <PayPerThoughtSection onNavigate={setActive} />
+            <PayPerThoughtSection onNavigate={navigate} />
           )}
           {active === "pricing" && (
-            <PricingSection onNavigate={setActive} />
+            <PricingSection onNavigate={navigate} />
           )}
           {active === "session-keys" && (
-            <SessionKeysSection onNavigate={setActive} />
+            <SessionKeysSection onNavigate={navigate} />
           )}
           {active === "settlement" && (
-            <SettlementSection onNavigate={setActive} />
+            <SettlementSection onNavigate={navigate} />
           )}
           {active === "tempo-network" && (
-            <TempoNetworkSection onNavigate={setActive} />
+            <TempoNetworkSection onNavigate={navigate} />
           )}
           {active === "tip-20-tokens" && (
-            <TIP20Section onNavigate={setActive} />
+            <TIP20Section onNavigate={navigate} />
           )}
           {active === "platform" && (
-            <PlatformSection onNavigate={setActive} />
+            <PlatformSection onNavigate={navigate} />
           )}
           {active === "api-reference" && (
-            <ApiReferenceSection onNavigate={setActive} />
+            <ApiReferenceSection onNavigate={navigate} />
           )}
-          {active === "sdk" && <SdkSection onNavigate={setActive} />}
+          {active === "sdk" && <SdkSection onNavigate={navigate} />}
           {active === "configuration" && (
-            <ConfigurationSection onNavigate={setActive} />
+            <ConfigurationSection onNavigate={navigate} />
           )}
         </div>
       </main>
