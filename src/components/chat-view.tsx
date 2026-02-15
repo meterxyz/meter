@@ -142,11 +142,7 @@ export function ChatView() {
     setInspectorTab("wallet");
   }, [setInspectorOpen, setInspectorTab]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, settlements]);
+  // No auto-scroll — user scrolls at their own pace
 
   const handleSend = async () => {
     const input = inputRef.current;

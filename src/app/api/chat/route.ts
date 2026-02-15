@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const { messages, model } = await req.json();
 
     const response = await getOpenRouterClient().chat.completions.create({
-      model: model || "anthropic/claude-sonnet-4-5-20250929",
+      model: model || "anthropic/claude-opus-4.6",
       messages: messages.map((m: { role: string; content: string }) => ({
         role: m.role,
         content: m.content,

@@ -64,7 +64,7 @@ A live cost ticker runs as the AI responds. Each message is settled as a blockch
 - **Real-time cost metering** — Watch your spend tick up token by token as the AI streams
 - **On-chain settlement** — Every response settled as a pathUSD transfer on Tempo with a verifiable tx hash
 - **Session keys** — One wallet signature authorizes the session. Zero popups after that
-- **Multi-model** — Claude, GPT-4o, Gemini, DeepSeek, Kimi and more via OpenRouter
+- **Multi-model** — Claude, GPT-5.2, Gemini, DeepSeek, Kimi and more via OpenRouter
 - **Developer Console** — Generate API keys, monitor usage, manage billing
 - **Developer API** — Integrate metered AI into your own apps with a single API key
 - **Non-custodial** — Your wallet, your keys. Meter never has access to your funds
@@ -118,7 +118,7 @@ src/
 | State | [Zustand](https://zustand-demo.pmnd.rs) |
 | Wallet Auth | [Privy](https://privy.io) |
 | Blockchain | [Tempo Network](https://tempo.xyz) via [viem](https://viem.sh) |
-| AI Models | [OpenRouter](https://openrouter.ai) (Claude, GPT-4o, Gemini, DeepSeek, Kimi) |
+| AI Models | [OpenRouter](https://openrouter.ai) (Claude, GPT-5.2, Gemini, DeepSeek, Kimi) |
 | Database | [Supabase](https://supabase.com) (PostgreSQL) |
 | UI | [Radix UI](https://radix-ui.com) + [shadcn/ui](https://ui.shadcn.com) |
 
@@ -170,7 +170,7 @@ curl -N https://getmeter.xyz/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Hello"}],
-    "model": "openai/gpt-4o"
+    "model": "anthropic/claude-opus-4.6"
   }'
 ```
 
@@ -210,11 +210,11 @@ Pay-per-token with a small markup on OpenRouter base rates. A typical message co
 
 | Model | Input (per 1M) | Output (per 1M) | ~Per Message |
 |-------|----------------|-----------------|-------------|
-| Claude Sonnet | $3.30 | $16.50 | ~$0.009 |
-| GPT-4o | $2.75 | $11.00 | ~$0.006 |
+| Claude Opus | $5.50 | $27.50 | ~$0.015 |
+| GPT-5.2 | $1.93 | $15.40 | ~$0.008 |
 | Kimi K2 | $0.66 | $2.64 | ~$0.002 |
 | DeepSeek V3 | $0.33 | $0.97 | ~$0.0006 |
-| Gemini Flash | $0.17 | $0.66 | ~$0.0004 |
+| Gemini 3 Pro | $2.20 | $13.20 | ~$0.007 |
 
 ## Contributing
 

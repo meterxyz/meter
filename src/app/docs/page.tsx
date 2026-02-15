@@ -256,7 +256,7 @@ function IntroductionSection({ onNavigate }: SectionProps) {
         </li>
         <li>
           <strong className="text-foreground">Multi-model</strong> — access
-          Claude, GPT-4o, Gemini, DeepSeek, Kimi and more via OpenRouter
+          Claude, GPT-5.2, Gemini, DeepSeek, Kimi and more via OpenRouter
         </li>
         <li>
           <strong className="text-foreground">Crypto-native privacy</strong> —
@@ -285,7 +285,7 @@ function HowItWorksSection({ onNavigate }: SectionProps) {
       <ul className="list-disc list-outside ml-5 text-[15px] text-muted-foreground leading-relaxed space-y-2 mb-8">
         <li>
           <strong className="text-foreground">OpenRouter</strong> — routes to
-          the best AI models (Claude, GPT-4o, Gemini, DeepSeek, Kimi, etc.) and reports token
+          the best AI models (Claude, GPT-5.2, Gemini, DeepSeek, Kimi, etc.) and reports token
           usage
         </li>
         <li>
@@ -492,11 +492,11 @@ function PricingSection({ onNavigate }: SectionProps) {
           </thead>
           <tbody className="text-[13px]">
             {[
-              ["Claude Sonnet", "$3.30", "$16.50", "~$0.009"],
-              ["GPT-4o", "$2.75", "$11.00", "~$0.006"],
+              ["Claude Opus", "$5.50", "$27.50", "~$0.015"],
+              ["GPT-5.2", "$1.93", "$15.40", "~$0.008"],
               ["Kimi K2", "$0.66", "$2.64", "~$0.002"],
               ["DeepSeek V3", "$0.33", "$0.97", "~$0.0006"],
-              ["Gemini Flash", "$0.17", "$0.66", "~$0.0004"],
+              ["Gemini 3 Pro", "$2.20", "$13.20", "~$0.007"],
             ].map(([model, input, output, perMsg]) => (
               <tr
                 key={model}
@@ -752,7 +752,7 @@ function PlatformSection({ onNavigate }: SectionProps) {
       <ul className="list-disc list-outside ml-5 text-[15px] text-muted-foreground leading-relaxed space-y-2 mb-8">
         <li>
           <strong className="text-foreground">Multi-model</strong> — access
-          Claude, GPT-4o, Gemini, DeepSeek, Kimi through one API
+          Claude, GPT-5.2, Gemini, DeepSeek, Kimi through one API
         </li>
         <li>
           <strong className="text-foreground">Pay-as-you-go</strong> — your
@@ -814,7 +814,7 @@ function ApiReferenceSection({ onNavigate }: SectionProps) {
   -H "Content-Type: application/json" \\
   -d '{
     "messages": [{"role": "user", "content": "Hello"}],
-    "model": "openai/gpt-4o"
+    "model": "anthropic/claude-opus-4.6"
   }'`}</CodeBlock>
 
       <h3 className="text-base font-semibold text-foreground mt-8 mb-3">
@@ -853,7 +853,7 @@ function ApiReferenceSection({ onNavigate }: SectionProps) {
                 string
               </td>
               <td className="px-4 py-2.5 text-muted-foreground">
-                OpenRouter model ID. Default: anthropic/claude-sonnet-4-5-20250929
+                OpenRouter model ID. Default: anthropic/claude-opus-4.6
               </td>
             </tr>
             <tr className="border-b border-white/[0.04]">
@@ -929,7 +929,7 @@ Content-Type: application/json
 {
   "txHash": "0x...",
   "walletAddress": "0x...",
-  "model": "openai/gpt-4o",
+  "model": "anthropic/claude-opus-4.6",
   "tokensIn": 150,
   "tokensOut": 420,
   "cost": 0.0058,
@@ -969,7 +969,7 @@ function SdkSection({ onNavigate }: SectionProps) {
   },
   body: JSON.stringify({
     messages: [{ role: "user", content: "What is quantum computing?" }],
-    model: "openai/gpt-4o",
+    model: "anthropic/claude-opus-4.6",
   }),
 });
 
@@ -1007,7 +1007,7 @@ response = requests.post(
     },
     json={
         "messages": [{"role": "user", "content": "Hello"}],
-        "model": "openai/gpt-4o",
+        "model": "anthropic/claude-opus-4.6",
     },
     stream=True,
 )
@@ -1038,7 +1038,7 @@ POST https://getmeter.xyz/api/v1/chat
 Authorization: Bearer mk_YOUR_KEY
 Content-Type: application/json
 
-Body: { "messages": [{"role":"user","content":"..."}], "model": "openai/gpt-4o" }
+Body: { "messages": [{"role":"user","content":"..."}], "model": "anthropic/claude-opus-4.6" }
 Response: SSE stream with JSON lines:
   {"type":"delta","content":"...","tokensOut":N}
   {"type":"usage","tokensIn":N,"tokensOut":N}
