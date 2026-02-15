@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const DEV_HOSTS = ["dev.getmeter.xyz", "getmeter.dev"];
+const PROD_HOST = "getmeter.xyz";
 
 export function middleware(req: NextRequest) {
   const hostname = req.headers.get("host") ?? "";
@@ -13,6 +14,13 @@ export function middleware(req: NextRequest) {
       url.pathname = `/console${pathname}`;
       return NextResponse.rewrite(url);
     }
+  }
+
+  // Block /console on production domain (keep demo & console separate)
+  if (pathname.startsWith("/console") && hostname === PROD_HOST) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
