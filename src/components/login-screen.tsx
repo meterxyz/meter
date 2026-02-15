@@ -70,7 +70,7 @@ export function LoginScreen() {
                       </div>
                     </button>
                     <a
-                      href="/console"
+                      href={typeof window !== "undefined" && window.location.hostname === "getmeter.xyz" ? "https://dev.getmeter.xyz" : "/console"}
                       onClick={() => setMenuOpen(false)}
                       className="w-full px-4 py-3.5 text-[13px] text-foreground text-left hover:bg-white/[0.04] transition-colors flex items-center gap-3"
                     >
