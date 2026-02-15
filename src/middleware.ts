@@ -15,13 +15,6 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // Block /console on the main domain
-  if (pathname.startsWith("/console") && !DEV_HOSTS.some((h) => hostname.startsWith(h.split(".")[0]))) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
-
   return NextResponse.next();
 }
 
