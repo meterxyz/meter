@@ -1,0 +1,43 @@
+{
+  "name": "@meterxyz/sdk",
+  "version": "0.1.0",
+  "description": "Official SDK for the Meter AI API — metered, crypto-settled AI",
+  "author": "Meter <hello@getmeter.xyz>",
+  "license": "MIT",
+  "homepage": "https://getmeter.xyz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meterxyz/meter.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "meter",
+    "ai",
+    "llm",
+    "openrouter",
+    "streaming",
+    "sse",
+    "crypto",
+    "web3"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
