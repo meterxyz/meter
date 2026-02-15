@@ -86,8 +86,26 @@ export function AuthorizeScreen() {
         /* already added */
       }
 
-        // 3. Transfer pathUSD to session key (one wallet popup)
+      // 3. If balance is low or zero, faucet FIRST (fresh wallets need gas + tokens)
+      if (lowBalance || balance === 0) {
+        setStatus("Adding testnet tokens...");
+        try {
+          await fetch("/api/faucet", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address: walletAddress }),
+          });
+          addEvent("tick", "Testnet tokens added via faucet");
+          // Brief pause for RPC to reflect the faucet deposit
+          await new Promise((r) => setTimeout(r, 2000));
+        } catch {
+          // Non-blocking — continue and hope balance is sufficient
+        }
+      }
+
+        // 4. Transfer pathUSD to session key (one wallet popup)
         // Session key holds its own balance and pays directly — no transferFrom needed
+        setStatus("Requesting approval in wallet...");
         const fundAmount = dollarToUnits(cap);
         const transferData = encodeFunctionData({
           abi: TIP20_ABI,
@@ -104,21 +122,6 @@ export function AuthorizeScreen() {
             chainId: `0x${tempoModerato.id.toString(16)}`,
           }],
         });
-
-      // 4. If balance is low, auto-faucet in background
-      if (lowBalance) {
-        setStatus("Balance below cap — testnet tokens will be added automatically");
-        try {
-          await fetch("/api/faucet", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ address: walletAddress }),
-          });
-          addEvent("tick", "Testnet tokens added via faucet");
-        } catch {
-          // Non-blocking — user can faucet later from inspector
-        }
-      }
 
         // 5. Finalize
       setMaxSpend(cap);
