@@ -17,7 +17,7 @@ const meter = new MeterClient({ apiKey: "mk_your_api_key" });
 
 const stream = await meter.chat({
   messages: [{ role: "user", content: "What is quantum computing?" }],
-  model: "openai/gpt-4o",
+  model: "anthropic/claude-opus-4.6",
 });
 
 for await (const event of stream) {
@@ -46,7 +46,7 @@ Returns `AsyncIterable<MeterEvent>`.
 | Option | Type | Description |
 |--------|------|-------------|
 | `messages` | `ChatMessage[]` | Chat messages (`role` + `content`) |
-| `model` | `string` | OpenRouter model ID. Default: `anthropic/claude-sonnet-4-5-20250929` |
+| `model` | `string` | OpenRouter model ID. Default: `anthropic/claude-opus-4.6` |
 
 ### Events
 

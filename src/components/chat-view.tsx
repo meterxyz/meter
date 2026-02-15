@@ -273,7 +273,7 @@ export function ChatView() {
         addEvent("tick", `Settling $${cost.toFixed(6)} on Tempo...`);
 
         try {
-          const txHash = await settle(cost, walletAddress || "", msgIdx);
+          const txHash = await settle(cost, sessionId, msgIdx);
           updateSettlement(settlementId, { txHash, status: "settled" });
           addEvent("settlement_success", `$${cost.toFixed(6)} settled | tx: ${txHash.slice(0, 10)}... | memo: ${memo}`);
         } catch (txErr) {
