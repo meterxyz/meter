@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DEFAULT_MODEL, getModel } from "@/lib/models";
 
+export type ReceiptStatus = "signing" | "signed" | "settled";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -12,6 +14,9 @@ export interface ChatMessage {
   cost?: number;
   confidence?: number;
   settled?: boolean;
+  receiptStatus?: ReceiptStatus;
+  signature?: string;
+  txHash?: string;
   timestamp: number;
 }
 
@@ -36,11 +41,11 @@ interface MeterState {
   cardOnFile: boolean;
 
   selectedModelId: string;
+  spendingCapEnabled: boolean;
   spendingCap: number;
 
   projects: ProjectThread[];
   activeProjectId: string;
-  globalSpend: number;
 
   inspectorOpen: boolean;
   inspectorTab: string;
@@ -63,6 +68,7 @@ interface MeterState {
   setInspectorTab: (tab: string) => void;
 
   setSelectedModelId: (id: string) => void;
+  setSpendingCapEnabled: (v: boolean) => void;
   setSpendingCap: (v: number) => void;
 
   reset: () => void;
@@ -110,6 +116,10 @@ function replaceActiveProject(state: MeterState, project: ProjectThread): Projec
   return state.projects.map((p) => (p.id === project.id ? project : p));
 }
 
+function shortHex() {
+  return Math.random().toString(16).slice(2, 10);
+}
+
 const initialProjects = [
   createProject("meter", "Meter"),
   createProject("keypass", "Keypass"),
@@ -124,11 +134,11 @@ export const useMeterStore = create<MeterState>()(
       cardOnFile: false,
 
       selectedModelId: DEFAULT_MODEL.id,
+      spendingCapEnabled: false,
       spendingCap: 10,
 
       projects: initialProjects,
       activeProjectId: "meter",
-      globalSpend: 0,
 
       inspectorOpen: false,
       inspectorTab: "usage",
@@ -144,7 +154,6 @@ export const useMeterStore = create<MeterState>()(
           cardOnFile: false,
           projects: initialProjects,
           activeProjectId: "meter",
-          globalSpend: 0,
           inspectorOpen: false,
         }),
 
@@ -179,12 +188,13 @@ export const useMeterStore = create<MeterState>()(
           const msgs = [...active.messages];
           const last = msgs[msgs.length - 1];
           if (last && last.role === "assistant") {
-            msgs[msgs.length - 1] = { ...last, content, tokensOut };
+            msgs[msgs.length - 1] = { ...last, content, tokensOut, receiptStatus: "signing" };
           }
 
           const prevOut = last?.tokensOut || 0;
-          const deltaOut = tokensOut - prevOut;
+          const deltaOut = Math.max(0, tokensOut - prevOut);
           const costDelta = deltaOut * model.outputPrice;
+
           const updated = {
             ...active,
             messages: msgs,
@@ -193,10 +203,7 @@ export const useMeterStore = create<MeterState>()(
             totalCost: active.totalCost + costDelta,
           };
 
-          return {
-            projects: replaceActiveProject(s, updated),
-            globalSpend: s.globalSpend + costDelta,
-          };
+          return { projects: replaceActiveProject(s, updated) };
         }),
 
       finalizeResponse: (tokensIn, tokensOut, confidence) =>
@@ -218,6 +225,8 @@ export const useMeterStore = create<MeterState>()(
               confidence,
               model: pricingModelId,
               settled: false,
+              receiptStatus: "signed",
+              signature: `0x${shortHex()}${shortHex()}${shortHex()}`,
             };
           }
 
@@ -239,10 +248,7 @@ export const useMeterStore = create<MeterState>()(
             totalCost: active.totalCost + inputCost,
           };
 
-          return {
-            projects: replaceActiveProject(s, updated),
-            globalSpend: s.globalSpend + inputCost,
-          };
+          return { projects: replaceActiveProject(s, updated) };
         }),
 
       markSettled: (messageId) =>
@@ -250,7 +256,16 @@ export const useMeterStore = create<MeterState>()(
           const active = getActiveProject(s);
           const updated = {
             ...active,
-            messages: active.messages.map((m) => (m.id === messageId ? { ...m, settled: true } : m)),
+            messages: active.messages.map((m) =>
+              m.id === messageId
+                ? {
+                    ...m,
+                    settled: true,
+                    receiptStatus: "settled" as const,
+                    txHash: `0x${shortHex()}${shortHex()}${shortHex()}${shortHex()}`,
+                  }
+                : m
+            ),
           };
           return { projects: replaceActiveProject(s, updated) };
         }),
@@ -266,16 +281,17 @@ export const useMeterStore = create<MeterState>()(
       setInspectorOpen: (v) => set({ inspectorOpen: v }),
       setInspectorTab: (tab) => set({ inspectorTab: tab }),
       setSelectedModelId: (id) => set({ selectedModelId: id }),
+      setSpendingCapEnabled: (v) => set({ spendingCapEnabled: v }),
       setSpendingCap: (v) => set({ spendingCap: v }),
 
       reset: () =>
         set((s) => ({
-          projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false })),
-          globalSpend: 0,
+          projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false }),
+          ),
         })),
     }),
     {
-      name: "meter-store-v2",
+      name: "meter-store-v3",
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         userId: s.userId,
@@ -283,10 +299,10 @@ export const useMeterStore = create<MeterState>()(
         authenticated: s.authenticated,
         cardOnFile: s.cardOnFile,
         selectedModelId: s.selectedModelId,
+        spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,
         projects: s.projects,
         activeProjectId: s.activeProjectId,
-        globalSpend: s.globalSpend,
       }),
     }
   )

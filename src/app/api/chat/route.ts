@@ -49,14 +49,16 @@ export async function POST(req: NextRequest) {
             }
 
             if (chunk.usage) {
-              const confidence = estimateConfidence(totalTokensOut);
+              const selfConfidence = typeof (chunk as { confidence?: unknown }).confidence === "number"
+                ? ((chunk as { confidence: number }).confidence)
+                : undefined;
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({
                     type: "usage",
                     tokensIn: chunk.usage.prompt_tokens,
                     tokensOut: chunk.usage.completion_tokens,
-                    confidence,
+                    confidence: selfConfidence,
                   })}\n\n`
                 )
               );
@@ -93,11 +95,4 @@ export async function POST(req: NextRequest) {
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-// Simulated confidence — in production the model self-reports this
-function estimateConfidence(tokensOut: number): number {
-  if (tokensOut > 500) return Math.min(95, 80 + Math.floor(Math.random() * 15));
-  if (tokensOut > 100) return Math.min(90, 70 + Math.floor(Math.random() * 20));
-  return Math.min(85, 60 + Math.floor(Math.random() * 25));
 }
