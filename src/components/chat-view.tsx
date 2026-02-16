@@ -7,27 +7,26 @@ import { ModelPicker } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { getModel, shortModelName } from "@/lib/models";
 
-/* ─── Message footer: model · $cost · confidence% · settled ─── */
 function MessageFooter({ msg }: { msg: ChatMessage }) {
   const markSettled = useMeterStore((s) => s.markSettled);
-
-  if (msg.cost === undefined) return null;
+  const hasCost = msg.cost !== undefined;
 
   const modelName = msg.model ? shortModelName(msg.model) : "—";
   const cost = msg.cost ?? 0;
   const confidence = msg.confidence ?? 0;
   const isSettled = msg.settled ?? false;
 
-  // Auto-mark as settled after a delay (simulates billing confirmation)
   useEffect(() => {
-    if (!isSettled && msg.cost !== undefined) {
+    if (!isSettled && hasCost) {
       const timer = setTimeout(() => markSettled(msg.id), 1500);
       return () => clearTimeout(timer);
     }
-  }, [isSettled, msg.cost, msg.id, markSettled]);
+  }, [hasCost, isSettled, msg.id, markSettled]);
+
+  if (!hasCost) return null;
 
   return (
-    <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-muted-foreground/60">
+    <div className="mt-2 flex items-center gap-2 font-mono text-[11px] text-muted-foreground/60">
       <span
         className="text-muted-foreground/80"
         style={{ color: msg.model ? getModel(msg.model).color : undefined }}
@@ -46,27 +45,33 @@ function MessageFooter({ msg }: { msg: ChatMessage }) {
   );
 }
 
-/* ─── Main ChatView ────────────────────────────────────────────── */
 export function ChatView() {
   const {
-    messages,
-    isStreaming,
+    projects,
+    activeProjectId,
+    setActiveProject,
+    globalSpend,
     addMessage,
     updateLastAssistantMessage,
     finalizeResponse,
     setStreaming,
     inspectorOpen,
     toggleInspector,
-    todayCost,
     spendingCap,
     selectedModelId,
-    todayMessageCount,
-    todayByModel,
   } = useMeterStore();
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
+  const messages = activeProject?.messages ?? [];
+  const isStreaming = activeProject?.isStreaming ?? false;
+  const todayCost = activeProject?.todayCost ?? 0;
+  const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [showSpendDropdown, setShowSpendDropdown] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
@@ -78,6 +83,21 @@ export function ChatView() {
     setInspectorOpen(true);
     setInspectorTab("usage");
   }, [setInspectorOpen, setInspectorTab]);
+
+  const handleProjectSwitch = (projectId: string) => {
+    if (projectId === activeProjectId) {
+      setShowProjectDropdown(false);
+      return;
+    }
+
+    const next = projects.find((p) => p.id === projectId);
+    if (!next) return;
+
+    setShowProjectDropdown(false);
+    setSwitchingProjectName(next.name);
+    setActiveProject(projectId);
+    setTimeout(() => setSwitchingProjectName(null), 700);
+  };
 
   const handleSend = async () => {
     const input = inputRef.current;
@@ -126,7 +146,9 @@ export function ChatView() {
         try {
           const parsed = JSON.parse(errBody);
           if (parsed.error) errMsg = parsed.error;
-        } catch { /* use default */ }
+        } catch {
+          // use default
+        }
         throw new Error(errMsg);
       }
 
@@ -208,70 +230,58 @@ export function ChatView() {
 
   return (
     <div className="flex h-screen bg-background">
+      {switchingProjectName && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 backdrop-blur-sm">
+          <div className="rounded-2xl border border-border bg-card px-8 py-6 text-center shadow-xl">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">Switching environment</p>
+            <p className="mt-2 text-xl text-foreground">{switchingProjectName}</p>
+          </div>
+        </div>
+      )}
+
       <div className={`flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
-        {/* Header */}
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2">
             <img src="/logo-dark-copy.webp" alt="Meter" width={48} height={13} />
           </div>
           <div className="flex items-center gap-2">
-            {/* Daily meter */}
             <div className="relative">
               <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground hover:border-foreground/20 hover:text-foreground transition-colors"
+                onClick={() => setShowSpendDropdown(!showSpendDropdown)}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
               >
-                <span className="text-foreground">${todayCost.toFixed(2)}</span>
-                <span className="text-muted-foreground/40 text-[9px]">today</span>
+                <span className="text-foreground">${globalSpend.toFixed(2)}</span>
+                <span className="text-[9px] text-muted-foreground/40">global</span>
                 <svg
-                  width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className={`transition-transform ${showDropdown ? "rotate-180" : ""}`}
+                  width="8"
+                  height="8"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`transition-transform ${showSpendDropdown ? "rotate-180" : ""}`}
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </button>
 
-              {showDropdown && (
+              {showSpendDropdown && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-border bg-card shadow-xl z-50 p-4">
-                    <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-3">
-                      Today&apos;s Usage
-                    </div>
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="font-mono text-lg text-foreground">${todayCost.toFixed(2)}</span>
-                      <span className="font-mono text-[10px] text-muted-foreground/40">
-                        of ${spendingCap.toFixed(0)} cap
-                      </span>
-                    </div>
-                    <div className="h-1 w-full rounded-full bg-border overflow-hidden mb-3">
-                      <div
-                        className="h-full rounded-full bg-foreground/40 transition-all duration-300"
-                        style={{ width: `${Math.min(100, (todayCost / spendingCap) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="font-mono text-[10px] text-muted-foreground/50 mb-3">
-                      {todayMessageCount} messages
-                    </div>
-                    {Object.keys(todayByModel).length > 0 && (
-                      <>
-                        <div className="h-px bg-border mb-3" />
-                        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-                          By Model
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSpendDropdown(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-border bg-card p-4 shadow-xl">
+                    <div className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">Global Spend</div>
+                    <div className="mb-3 font-mono text-lg text-foreground">${globalSpend.toFixed(2)}</div>
+                    <div className="h-px bg-border" />
+                    <div className="mt-3 space-y-1.5">
+                      {projects.map((project) => (
+                        <div key={project.id} className="flex items-center justify-between">
+                          <span className="font-mono text-[10px] text-muted-foreground">{project.name}</span>
+                          <span className="font-mono text-[10px] text-foreground">${project.totalCost.toFixed(2)}</span>
                         </div>
-                        <div className="space-y-1.5">
-                          {Object.entries(todayByModel).map(([model, data]) => (
-                            <div key={model} className="flex items-center justify-between">
-                              <span className="font-mono text-[10px] text-muted-foreground">{model}</span>
-                              <span className="font-mono text-[10px] text-foreground">
-                                ${data.cost.toFixed(2)} &middot; {data.count}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 </>
               )}
@@ -279,7 +289,7 @@ export function ChatView() {
 
             <button
               onClick={toggleInspector}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 hover:bg-foreground/5 transition-colors"
+              className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 transition-colors hover:bg-foreground/5"
               title="Open panel"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
@@ -290,28 +300,19 @@ export function ChatView() {
           </div>
         </header>
 
-        {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-2xl px-4 py-6">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-24 gap-3">
-                <p className="text-sm text-muted-foreground">What are you building?</p>
-                <p className="font-mono text-[10px] text-muted-foreground/40">
-                  Every model available. The meter runs in dollars.
-                </p>
+              <div className="flex flex-col items-center justify-center gap-3 py-24">
+                <p className="text-sm text-muted-foreground">What are you building in {activeProject?.name ?? "this"}?</p>
+                <p className="font-mono text-[10px] text-muted-foreground/40">Every model available. The meter runs in dollars.</p>
               </div>
             )}
 
             {messages.map((msg) => (
               <div key={msg.id} className="mb-4">
                 <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-foreground/10 text-foreground"
-                        : "text-foreground"
-                    }`}
-                  >
+                  <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                     {msg.role === "assistant" && <MessageFooter msg={msg} />}
                   </div>
@@ -322,18 +323,50 @@ export function ChatView() {
             {isStreaming && messages[messages.length - 1]?.content === "" && (
               <div className="mb-4 flex justify-start">
                 <div className="flex gap-1 px-4 py-3">
-                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-pulse" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-pulse [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-pulse [animation-delay:300ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Composer */}
         <div className="border-t border-border p-4">
           <div className="mx-auto max-w-2xl">
+            <div className="mb-2 relative">
+              <button
+                onClick={() => setShowProjectDropdown((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-border px-4 py-2.5 text-left transition-colors hover:bg-foreground/5"
+              >
+                <span className="text-sm text-foreground">{projects.length} environments</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-muted-foreground transition-transform ${showProjectDropdown ? "rotate-180" : ""}`}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {showProjectDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowProjectDropdown(false)} />
+                  <div className="absolute bottom-full z-50 mb-2 w-full rounded-xl border border-border bg-card p-2 shadow-xl">
+                    {projects.map((project) => (
+                      <button
+                        key={project.id}
+                        onClick={() => handleProjectSwitch(project.id)}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/5 ${project.id === activeProjectId ? "bg-foreground/[0.07]" : ""}`}
+                      >
+                        <div>
+                          <div className="text-sm text-foreground">{project.name}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground/60">${project.totalCost.toFixed(2)} total</div>
+                        </div>
+                        {project.id === activeProjectId && <span className="font-mono text-[10px] text-muted-foreground">active</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
             <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2">
               <ModelPicker />
               <textarea
@@ -361,6 +394,7 @@ export function ChatView() {
                 </svg>
               </button>
             </div>
+            <p className="mt-2 font-mono text-[10px] text-muted-foreground/50">{todayMessageCount} msgs today in {activeProject?.name ?? "—"}</p>
           </div>
         </div>
       </div>

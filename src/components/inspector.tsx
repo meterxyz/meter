@@ -1,6 +1,6 @@
 "use client";
 
-import { useMeterStore } from "@/lib/store";
+import { useMeterStore, ChatMessage } from "@/lib/store";
 
 export function Inspector() {
   const {
@@ -8,17 +8,15 @@ export function Inspector() {
     setInspectorOpen,
     inspectorTab,
     setInspectorTab,
-    todayCost,
-    todayTokensIn,
-    todayTokensOut,
-    todayMessageCount,
-    todayByModel,
+    projects,
+    activeProjectId,
     spendingCap,
     setSpendingCap,
     email,
     logout,
-    messages,
   } = useMeterStore();
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
 
   if (!inspectorOpen) return null;
 
@@ -65,13 +63,13 @@ export function Inspector() {
         <div className="flex-1 overflow-y-auto p-4">
           {inspectorTab === "usage" && (
             <UsageTab
-              todayCost={todayCost}
-              todayTokensIn={todayTokensIn}
-              todayTokensOut={todayTokensOut}
-              todayMessageCount={todayMessageCount}
-              todayByModel={todayByModel}
+              todayCost={activeProject?.todayCost ?? 0}
+              todayTokensIn={activeProject?.todayTokensIn ?? 0}
+              todayTokensOut={activeProject?.todayTokensOut ?? 0}
+              todayMessageCount={activeProject?.todayMessageCount ?? 0}
+              todayByModel={activeProject?.todayByModel ?? {}}
               spendingCap={spendingCap}
-              messages={messages}
+              messages={activeProject?.messages ?? []}
             />
           )}
           {inspectorTab === "billing" && <BillingTab />}
@@ -123,7 +121,7 @@ function UsageTab({
   todayMessageCount: number;
   todayByModel: Record<string, { cost: number; count: number }>;
   spendingCap: number;
-  messages: ReturnType<typeof useMeterStore.getState>["messages"];
+  messages: ChatMessage[];
 }) {
   const settledCount = messages.filter((m) => m.role === "assistant" && m.settled).length;
   const pendingCount = messages.filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled).length;
