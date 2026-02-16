@@ -10,8 +10,7 @@ import { getModel, shortModelName } from "@/lib/models";
 /* ─── Message footer: model · $cost · confidence% · settled ─── */
 function MessageFooter({ msg }: { msg: ChatMessage }) {
   const markSettled = useMeterStore((s) => s.markSettled);
-
-  if (msg.cost === undefined) return null;
+  const hasCost = msg.cost !== undefined;
 
   const modelName = msg.model ? shortModelName(msg.model) : "—";
   const cost = msg.cost ?? 0;
@@ -20,11 +19,13 @@ function MessageFooter({ msg }: { msg: ChatMessage }) {
 
   // Auto-mark as settled after a delay (simulates billing confirmation)
   useEffect(() => {
-    if (!isSettled && msg.cost !== undefined) {
+    if (!isSettled && hasCost) {
       const timer = setTimeout(() => markSettled(msg.id), 1500);
       return () => clearTimeout(timer);
     }
-  }, [isSettled, msg.cost, msg.id, markSettled]);
+  }, [hasCost, isSettled, msg.id, markSettled]);
+
+  if (!hasCost) return null;
 
   return (
     <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-muted-foreground/60">
