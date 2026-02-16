@@ -5,42 +5,21 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  model?: string;        // model ID used for this response
   tokensIn?: number;
   tokensOut?: number;
-  cost?: number;
-  timestamp: number;
-  settlementId?: string; // links to a Settlement
-}
-
-export interface Settlement {
-  id: string;
-  txHash: string;
-  sessionId: string;
-  amount: number;
-  tokensIn: number;
-  tokensOut: number;
-  timestamp: number;
-  status: "pending" | "settled" | "failed";
-}
-
-export interface MeterEvent {
-  id: string;
-  type: "tick" | "settlement_success" | "settlement_fail" | "cap_hit" | "revoke";
-  message: string;
+  cost?: number;         // $ cost for this message
+  confidence?: number;   // AI self-reported confidence 0-100
+  settled?: boolean;     // billing accounted for
   timestamp: number;
 }
-
-// Pricing is now dynamic per model — see lib/models.ts
 
 interface MeterState {
-  // Session
-  sessionId: string;
-  sessionStart: number;
-
-  // Session key (ephemeral signer)
-  sessionKeyPrivate: string | null;  // hex private key
-  sessionKeyAddress: string | null;  // derived address
-  authorized: boolean;               // user has approved
+  // Auth
+  userId: string | null;
+  email: string | null;
+  authenticated: boolean;
+  cardOnFile: boolean;
 
   // Model
   selectedModelId: string;
@@ -49,77 +28,110 @@ interface MeterState {
   messages: ChatMessage[];
   isStreaming: boolean;
 
-  // Metering
-  totalTokensIn: number;
-  totalTokensOut: number;
-  totalCost: number;
-  maxSpend: number;
-  burnRate: number; // $/sec rolling average
+  // Daily metering (resets at midnight)
+  todayCost: number;
+  todayTokensIn: number;
+  todayTokensOut: number;
+  todayMessageCount: number;
+  todayByModel: Record<string, { cost: number; count: number }>;
+  todayDate: string;
 
-  // Settlements
-  settlements: Settlement[];
-
-  // Event log
-  events: MeterEvent[];
+  // Spending cap
+  spendingCap: number;
 
   // Inspector
   inspectorOpen: boolean;
   inspectorTab: string;
 
   // Actions
+  setAuth: (userId: string, email: string) => void;
+  setCardOnFile: (v: boolean) => void;
+  logout: () => void;
+
   addMessage: (msg: ChatMessage) => void;
   updateLastAssistantMessage: (content: string, tokensOut: number) => void;
-  finalizeResponse: (tokensIn: number, tokensOut: number) => void;
+  finalizeResponse: (tokensIn: number, tokensOut: number, confidence: number) => void;
   setStreaming: (v: boolean) => void;
+  markSettled: (messageId: string) => void;
+
   toggleInspector: () => void;
   setInspectorOpen: (v: boolean) => void;
   setInspectorTab: (tab: string) => void;
-  addSettlement: (s: Settlement) => void;
-  updateSettlement: (id: string, updates: Partial<Settlement>) => void;
-  addEvent: (type: MeterEvent["type"], message: string) => void;
-  setMaxSpend: (v: number) => void;
+
   setSelectedModelId: (id: string) => void;
-  linkSettlementToMessage: (messageId: string, settlementId: string) => void;
-  setSessionKey: (privateKey: string, address: string) => void;
-  setAuthorized: (v: boolean) => void;
-  revoke: () => void;
+  setSpendingCap: (v: number) => void;
+
   reset: () => void;
 }
 
-function generateId() {
-  return Math.random().toString(36).slice(2, 10);
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function generateSessionId() {
-  return `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+function maybeResetDaily(state: MeterState) {
+  const today = todayStr();
+  if (state.todayDate !== today) {
+    return {
+      todayCost: 0,
+      todayTokensIn: 0,
+      todayTokensOut: 0,
+      todayMessageCount: 0,
+      todayByModel: {} as Record<string, { cost: number; count: number }>,
+      todayDate: today,
+    };
+  }
+  return {};
 }
 
-export const useMeterStore = create<MeterState>((set, get) => ({
-  sessionId: generateSessionId(),
-  sessionStart: Date.now(),
-
-  sessionKeyPrivate: null,
-  sessionKeyAddress: null,
-  authorized: false,
+export const useMeterStore = create<MeterState>((set) => ({
+  userId: null,
+  email: null,
+  authenticated: false,
+  cardOnFile: false,
 
   selectedModelId: DEFAULT_MODEL.id,
 
   messages: [],
   isStreaming: false,
 
-  totalTokensIn: 0,
-  totalTokensOut: 0,
-  totalCost: 0,
-  maxSpend: 1.0, // $1 default cap
-  burnRate: 0,
+  todayCost: 0,
+  todayTokensIn: 0,
+  todayTokensOut: 0,
+  todayMessageCount: 0,
+  todayByModel: {},
+  todayDate: todayStr(),
 
-  settlements: [],
-  events: [],
+  spendingCap: 10.0,
+
   inspectorOpen: false,
-  inspectorTab: "wallet",
+  inspectorTab: "usage",
+
+  setAuth: (userId, email) =>
+    set({ userId, email, authenticated: true }),
+
+  setCardOnFile: (v) => set({ cardOnFile: v }),
+
+  logout: () =>
+    set({
+      userId: null,
+      email: null,
+      authenticated: false,
+      cardOnFile: false,
+      messages: [],
+      isStreaming: false,
+      todayCost: 0,
+      todayTokensIn: 0,
+      todayTokensOut: 0,
+      todayMessageCount: 0,
+      todayByModel: {},
+      inspectorOpen: false,
+    }),
 
   addMessage: (msg) =>
-    set((s) => ({ messages: [...s.messages, msg] })),
+    set((s) => {
+      const resets = maybeResetDaily(s);
+      return { ...resets, messages: [...s.messages, msg] };
+    }),
 
   updateLastAssistantMessage: (content, tokensOut) =>
     set((s) => {
@@ -129,101 +141,74 @@ export const useMeterStore = create<MeterState>((set, get) => ({
       if (last && last.role === "assistant") {
         msgs[msgs.length - 1] = { ...last, content, tokensOut };
       }
-      const newTotalOut = s.totalTokensOut + (tokensOut - (last?.tokensOut || 0));
-      const costDelta = (tokensOut - (last?.tokensOut || 0)) * model.outputPrice;
-      const elapsed = (Date.now() - s.sessionStart) / 1000;
+      const prevOut = last?.tokensOut || 0;
+      const deltaOut = tokensOut - prevOut;
+      const costDelta = deltaOut * model.outputPrice;
       return {
         messages: msgs,
-        totalTokensOut: newTotalOut,
-        totalCost: s.totalCost + costDelta,
-        burnRate: elapsed > 0 ? (s.totalCost + costDelta) / elapsed : 0,
+        todayTokensOut: s.todayTokensOut + deltaOut,
+        todayCost: s.todayCost + costDelta,
       };
     }),
 
-  finalizeResponse: (tokensIn, tokensOut) =>
+  finalizeResponse: (tokensIn, tokensOut, confidence) =>
     set((s) => {
       const model = getModel(s.selectedModelId);
       const inputCost = tokensIn * model.inputPrice;
+      const totalMsgCost = inputCost + tokensOut * model.outputPrice;
       const msgs = [...s.messages];
       const last = msgs[msgs.length - 1];
       if (last && last.role === "assistant") {
-        const totalMsgCost = inputCost + tokensOut * model.outputPrice;
-        msgs[msgs.length - 1] = { ...last, tokensIn, tokensOut, cost: totalMsgCost };
+        msgs[msgs.length - 1] = {
+          ...last,
+          tokensIn,
+          tokensOut,
+          cost: totalMsgCost,
+          confidence,
+          model: s.selectedModelId,
+          settled: false,
+        };
       }
+
+      const byModel = { ...s.todayByModel };
+      const modelKey = model.name;
+      const existing = byModel[modelKey] || { cost: 0, count: 0 };
+      byModel[modelKey] = {
+        cost: existing.cost + totalMsgCost,
+        count: existing.count + 1,
+      };
+
       return {
         messages: msgs,
-        totalTokensIn: s.totalTokensIn + tokensIn,
+        todayTokensIn: s.todayTokensIn + tokensIn,
+        todayMessageCount: s.todayMessageCount + 1,
+        todayByModel: byModel,
       };
     }),
+
+  markSettled: (messageId) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, settled: true } : m
+      ),
+    })),
 
   setStreaming: (v) => set({ isStreaming: v }),
   toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
   setInspectorOpen: (v) => set({ inspectorOpen: v }),
-
-  addSettlement: (s) =>
-    set((state) => ({ settlements: [s, ...state.settlements] })),
-
-  updateSettlement: (id, updates) =>
-    set((state) => ({
-      settlements: state.settlements.map((s) =>
-        s.id === id ? { ...s, ...updates } : s
-      ),
-    })),
-
-  addEvent: (type, message) =>
-    set((s) => ({
-      events: [
-        { id: generateId(), type, message, timestamp: Date.now() },
-        ...s.events,
-      ],
-    })),
-
-  setMaxSpend: (v) => set({ maxSpend: v }),
-  setSelectedModelId: (id) => set({ selectedModelId: id }),
-
-  linkSettlementToMessage: (messageId, settlementId) =>
-    set((s) => ({
-      messages: s.messages.map((m) =>
-        m.id === messageId ? { ...m, settlementId } : m
-      ),
-    })),
-
-  setSessionKey: (privateKey, address) =>
-    set({ sessionKeyPrivate: privateKey, sessionKeyAddress: address }),
-
-  setAuthorized: (v) => set({ authorized: v }),
-
   setInspectorTab: (tab) => set({ inspectorTab: tab }),
-
-  revoke: () =>
-    set({
-      sessionKeyPrivate: null,
-      sessionKeyAddress: null,
-      authorized: false,
-      messages: [],
-      isStreaming: false,
-      totalTokensIn: 0,
-      totalTokensOut: 0,
-      totalCost: 0,
-      burnRate: 0,
-      settlements: [],
-      events: [],
-    }),
+  setSelectedModelId: (id) => set({ selectedModelId: id }),
+  setSpendingCap: (v) => set({ spendingCap: v }),
 
   reset: () =>
     set({
-      sessionId: generateSessionId(),
-      sessionStart: Date.now(),
-      sessionKeyPrivate: null,
-      sessionKeyAddress: null,
-      authorized: false,
       messages: [],
       isStreaming: false,
-      totalTokensIn: 0,
-      totalTokensOut: 0,
-      totalCost: 0,
-      burnRate: 0,
-      settlements: [],
-      events: [],
+      todayCost: 0,
+      todayTokensIn: 0,
+      todayTokensOut: 0,
+      todayMessageCount: 0,
+      todayByModel: {},
+      todayDate: todayStr(),
     }),
 }));
