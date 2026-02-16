@@ -35,12 +35,19 @@ function useAnimatedNumber(value: number, duration = 350) {
 interface MeterPillProps {
   onClick?: () => void;
   value?: number;
+  tokens?: number;
 }
 
-export function MeterPill({ onClick, value }: MeterPillProps) {
+function formatTokens(tokens: number) {
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+  return tokens.toString();
+}
+
+export function MeterPill({ onClick, value, tokens }: MeterPillProps) {
   const { projects, activeProjectId } = useMeterStore();
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
   const today = value ?? activeProject?.todayCost ?? 0;
+  const todayTokens = tokens ?? (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
   const animatedToday = useAnimatedNumber(today);
 
   return (
@@ -51,7 +58,7 @@ export function MeterPill({ onClick, value }: MeterPillProps) {
     >
       <MeterIcon active={activeProject?.isStreaming ?? false} size={16} />
       <span>${animatedToday.toFixed(2)}</span>
-      <span className="text-[9px] text-muted-foreground/40">today</span>
+      <span className="text-[9px] text-muted-foreground/40">{formatTokens(todayTokens)} tkn</span>
     </button>
   );
 }

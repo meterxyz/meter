@@ -36,7 +36,7 @@ function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string
           href={`/receipt/${msg.id}?project=${projectId}`}
           target="_blank"
           rel="noopener noreferrer"
-          className={`inline-flex items-center gap-1 transition-colors ${msg.receiptStatus === "settled" ? "text-emerald-500/80 hover:text-emerald-400" : "text-amber-500/80 hover:text-amber-400"}`}
+          className={`inline-flex items-center gap-1 transition-colors ${msg.receiptStatus === "settled" ? "text-emerald-500/80 hover:text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
           title="Open receipt"
         >
           {statusLabel(msg)}
@@ -69,6 +69,7 @@ export function ChatView() {
   const messages = activeProject?.messages ?? [];
   const isStreaming = activeProject?.isStreaming ?? false;
   const todayCost = activeProject?.todayCost ?? 0;
+  const todayTokens = (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -243,7 +244,7 @@ export function ChatView() {
               onClick={() => setShowHeaderMeterDropdown((v) => !v)}
               className="rounded-md border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
             >
-              {activeProject?.name} · ${headerMeterStats.today.toFixed(2)} today
+              {activeProject?.name} · ${headerMeterStats.total.toFixed(2)} total
             </button>
             {showHeaderMeterDropdown && (
               <>
@@ -299,14 +300,16 @@ export function ChatView() {
 
         <div className="border-t border-border p-4">
           <div className="mx-auto max-w-2xl">
-            <div className="relative pt-6">
-              <div className="absolute -top-9 inset-x-0 z-0 px-2">
+            <div className="relative pt-4">
+              <div className="absolute -top-5 inset-x-0 z-0">
                 <button
                   onClick={() => setShowProjectDropdown((v) => !v)}
-                  className="w-full rounded-xl border border-border bg-card/95 px-4 pb-4 pt-2 text-left shadow-lg backdrop-blur"
+                  className="w-full rounded-xl border border-border bg-card/95 px-4 py-2 text-left shadow-lg backdrop-blur transition-colors hover:border-foreground/20 hover:bg-card"
                 >
-                  <div className="text-sm text-foreground">{activeProject?.name ?? "Workspace"}</div>
-                  <div className="font-mono text-[10px] text-muted-foreground/60">Switch project / startup</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm text-foreground">{activeProject?.name ?? "Workspace"}</div>
+                    <div className="font-mono text-[10px] text-muted-foreground/70">Switch workspace</div>
+                  </div>
                 </button>
 
                 {showProjectDropdown && (
@@ -343,7 +346,7 @@ export function ChatView() {
                     t.style.height = Math.min(t.scrollHeight, 120) + "px";
                   }}
                 />
-                <MeterPill onClick={openUsageInspector} value={todayCost} />
+                <MeterPill onClick={openUsageInspector} value={todayCost} tokens={todayTokens} />
                 <button
                   onClick={handleSend}
                   disabled={isStreaming}
