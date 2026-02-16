@@ -38,27 +38,38 @@ interface MeterPillProps {
   tokens?: number;
 }
 
-function formatTokens(tokens: number) {
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
-  return tokens.toString();
-}
-
 export function MeterPill({ onClick, value, tokens }: MeterPillProps) {
   const { projects, activeProjectId } = useMeterStore();
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
   const today = value ?? activeProject?.todayCost ?? 0;
   const todayTokens = tokens ?? (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
+  const isStreaming = activeProject?.isStreaming ?? false;
   const animatedToday = useAnimatedNumber(today);
+
+  // Show more precision while streaming so digits visibly tick
+  const costStr = isStreaming
+    ? `$${animatedToday.toFixed(4)}`
+    : `$${animatedToday.toFixed(2)}`;
 
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
+      className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 font-mono text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
       title="Open usage drawer"
     >
-      <MeterIcon active={activeProject?.isStreaming ?? false} size={16} />
-      <span>${animatedToday.toFixed(2)}</span>
-      <span className="text-[9px] text-muted-foreground/40">{formatTokens(todayTokens)} tkn</span>
+      <MeterIcon active={isStreaming} size={16} />
+      <span className="text-[12px] text-foreground tabular-nums">
+        {costStr}
+      </span>
+      {isStreaming && todayTokens > 0 ? (
+        <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+          {todayTokens.toLocaleString()} tkn
+        </span>
+      ) : (
+        <span className="text-[10px] text-muted-foreground/50">
+          {todayTokens.toLocaleString()} tkn
+        </span>
+      )}
     </button>
   );
 }

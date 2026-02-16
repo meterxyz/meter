@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useEffect, useMemo, useState } from "react";
+import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
+import { ActionCard } from "@/components/action-card";
 import { getModel, shortModelName } from "@/lib/models";
 
 function statusLabel(msg: ChatMessage) {
@@ -49,6 +50,27 @@ function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string
   );
 }
 
+/* ─── Thinking indicator with shimmer ─── */
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-3 mb-4">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        className="meter-spinning text-muted-foreground/50"
+      >
+        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="20 14" />
+      </svg>
+      <span className="thinking-shimmer text-sm font-medium select-none">
+        Thinking
+      </span>
+    </div>
+  );
+}
+
+/* ─── Main ChatView ────────────────────────────────────────────── */
 export function ChatView() {
   const {
     projects,
@@ -63,19 +85,24 @@ export function ChatView() {
     spendingCap,
     spendingCapEnabled,
     selectedModelId,
+    approveCard,
+    rejectCard,
   } = useMeterStore();
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
   const messages = activeProject?.messages ?? [];
   const isStreaming = activeProject?.isStreaming ?? false;
   const todayCost = activeProject?.todayCost ?? 0;
-  const todayTokens = (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [showHeaderMeterDropdown, setShowHeaderMeterDropdown] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
+  const isNearBottomRef = useRef(true);
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
@@ -105,25 +132,34 @@ export function ChatView() {
     setInspectorTab("usage");
   }, [setInspectorOpen, setInspectorTab]);
 
-  const openUsageInspector = () => {
-    setInspectorOpen(true);
-    setInspectorTab("usage");
-  };
-
   const handleProjectSwitch = (projectId: string) => {
     if (projectId === activeProjectId) {
       setShowProjectDropdown(false);
       return;
     }
-
     const next = projects.find((p) => p.id === projectId);
     if (!next) return;
-
     setShowProjectDropdown(false);
     setSwitchingProjectName(next.name);
     setActiveProject(projectId);
     setTimeout(() => setSwitchingProjectName(null), 700);
   };
+
+  // Track whether user is scrolled near the bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const threshold = 80;
+    isNearBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
+
+  // Auto-scroll to bottom when content changes and user was at bottom
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   const handleSend = async () => {
     const input = inputRef.current;
@@ -134,6 +170,9 @@ export function ChatView() {
     const userContent = input.value.trim();
     input.value = "";
     input.style.height = "auto";
+
+    // Snap to bottom when user sends a message
+    isNearBottomRef.current = true;
 
     const userMsg: ChatMessage = {
       id: Math.random().toString(36).slice(2, 10),
@@ -222,6 +261,9 @@ export function ChatView() {
     }
   };
 
+  const lastMsg = messages[messages.length - 1];
+  const showThinking = isStreaming && lastMsg?.role === "assistant" && lastMsg.content === "";
+
   return (
     <div className="flex h-screen bg-background">
       {switchingProjectName && (
@@ -275,7 +317,8 @@ export function ChatView() {
           </div>
         </header>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        {/* Messages */}
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-2xl px-4 py-6">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center gap-3 py-24">
@@ -289,11 +332,32 @@ export function ChatView() {
                 <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
                     <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                    {/* Inline action cards */}
+                    {msg.cards && msg.cards.length > 0 && (
+                      <div className="mt-2">
+                        {msg.cards.map((card) => (
+                          <ActionCard
+                            key={card.id}
+                            card={card}
+                            onApprove={() => approveCard(msg.id, card.id)}
+                            onReject={() => rejectCard(msg.id, card.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+
                     {msg.role === "assistant" && <MessageFooter msg={msg} projectId={activeProjectId} />}
                   </div>
                 </div>
               </div>
             ))}
+
+            {/* Thinking indicator — shows when waiting for first token */}
+            {showThinking && <ThinkingIndicator />}
+
+            {/* Scroll anchor */}
+            <div ref={bottomRef} />
           </div>
         </div>
 
