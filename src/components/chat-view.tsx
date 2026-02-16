@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
-import { ModelPicker } from "@/components/model-picker";
+import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { getModel, shortModelName } from "@/lib/models";
 
@@ -67,6 +67,7 @@ export function ChatView() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
@@ -212,7 +213,7 @@ export function ChatView() {
         {/* Header */}
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2">
-            <img src="/logo-dark-copy.webp" alt="Meter" width={48} height={13} />
+            <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
           </div>
           <div className="flex items-center gap-2">
             {/* Daily meter */}
@@ -331,35 +332,58 @@ export function ChatView() {
           </div>
         </div>
 
-        {/* Composer */}
-        <div className="border-t border-border p-4">
+        {/* Composer — no border-t divider, with fade gradient above */}
+        <div className="relative p-4 pt-0">
+          {/* Fade gradient so scrolling content dissolves above composer */}
+          <div className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-t from-background to-transparent" />
+
           <div className="mx-auto max-w-2xl">
-            <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2">
-              <ModelPicker />
-              <textarea
-                ref={inputRef}
-                onKeyDown={handleKeyDown}
-                placeholder="Say something..."
-                rows={1}
-                className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                style={{ maxHeight: "120px" }}
-                onInput={(e) => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 120) + "px";
-                }}
-              />
-              <MeterPill />
-              <button
-                onClick={handleSend}
-                disabled={isStreaming}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
-                </svg>
-              </button>
+            {/* Click-away backdrop when model picker is open */}
+            {modelPickerOpen && (
+              <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
+            )}
+
+            {/* Unified composer container — picker panel + input are one box */}
+            <div className="relative z-40 rounded-xl border border-border bg-card">
+              {/* Model picker panel (expands inline above input) */}
+              {modelPickerOpen && (
+                <>
+                  <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
+                  <div className="h-px bg-border" />
+                </>
+              )}
+
+              {/* Input row */}
+              <div className="flex items-end gap-2 p-2">
+                <ModelPickerTrigger
+                  open={modelPickerOpen}
+                  onToggle={() => setModelPickerOpen(!modelPickerOpen)}
+                />
+                <textarea
+                  ref={inputRef}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Say something..."
+                  rows={1}
+                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  style={{ maxHeight: "120px" }}
+                  onInput={(e) => {
+                    const t = e.currentTarget;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 120) + "px";
+                  }}
+                />
+                <MeterPill />
+                <button
+                  onClick={handleSend}
+                  disabled={isStreaming}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
