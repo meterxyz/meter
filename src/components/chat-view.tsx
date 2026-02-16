@@ -77,6 +77,7 @@ export function ChatView() {
   const messages = activeProject?.messages ?? [];
   const isStreaming = activeProject?.isStreaming ?? false;
   const todayCost = activeProject?.todayCost ?? 0;
+  const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
