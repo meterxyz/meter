@@ -320,6 +320,7 @@ export function ChatView() {
                 </button>
               </div>
             </div>
+            <p className="mt-2 font-mono text-[10px] text-muted-foreground/50">{todayMessageCount} msgs today in {activeProject?.name ?? "—"}</p>
           </div>
         </div>
       </div>
