@@ -1,19 +1,64 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useMeterStore } from "@/lib/store";
 import { MeterIcon } from "./meter-icon";
 
-export function MeterPill() {
-  const { todayCost, isStreaming, toggleInspector } = useMeterStore();
+function useAnimatedNumber(value: number, duration = 350) {
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const from = prevRef.current;
+    const diff = value - from;
+
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const next = from + diff * p;
+      setDisplay(next);
+      if (p < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        prevRef.current = value;
+      }
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+
+  return display;
+}
+
+interface MeterPillProps {
+  onClick?: () => void;
+  value?: number;
+  tokens?: number;
+}
+
+function formatTokens(tokens: number) {
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+  return tokens.toString();
+}
+
+export function MeterPill({ onClick, value, tokens }: MeterPillProps) {
+  const { projects, activeProjectId } = useMeterStore();
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
+  const today = value ?? activeProject?.todayCost ?? 0;
+  const todayTokens = tokens ?? (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
+  const animatedToday = useAnimatedNumber(today);
 
   return (
     <button
-      onClick={toggleInspector}
+      onClick={onClick}
       className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
+      title="Open usage drawer"
     >
-      <MeterIcon active={isStreaming} size={16} />
-      <span>${todayCost.toFixed(2)}</span>
-      <span className="text-muted-foreground/40 text-[9px]">today</span>
+      <MeterIcon active={activeProject?.isStreaming ?? false} size={16} />
+      <span>${animatedToday.toFixed(2)}</span>
+      <span className="text-[9px] text-muted-foreground/40">{formatTokens(todayTokens)} tkn</span>
     </button>
   );
 }

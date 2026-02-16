@@ -29,6 +29,16 @@ function ProviderLogo({ provider, size = 14 }: { provider: string; size?: number
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5c-2.49 0-4.5-2.01-4.5-4.5S8.51 7.5 11 7.5c1.25 0 2.38.51 3.19 1.33l-1.29 1.25A2.99 2.99 0 0 0 11 9.5c-1.38 0-2.5 1.12-2.5 2.5s1.12 2.5 2.5 2.5c1.19 0 2.19-.83 2.44-1.95H11v-1.55h4.44c.05.28.06.56.06.85 0 2.49-2.01 4.15-4.5 4.15z" />
         </svg>
       );
+    case "Meter":
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+          <path d="M12 3v4" />
+          <path d="M12 17v4" />
+          <path d="M3 12h4" />
+          <path d="M17 12h4" />
+          <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+        </svg>
+      );
     default:
       return <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: "#888" }} />;
   }

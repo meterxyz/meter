@@ -53,10 +53,10 @@ A live cost ticker runs as the AI responds. Each message shows the model used, d
 ```
 
 1. **Sign up** — Enter your email to create an account
-2. **Add card** — Stripe verifies your card with a $0.00 auth hold (no charge)
-3. **Chat** — Messages stream via SSE; the daily meter ticks in real time
+2. **Add card** — Card is verified with a no-charge authorization hold
+3. **Chat** — Messages stream in chat, and the daily meter ticks in real time
 4. **Settle** — Each message is marked settled with model, cost, and confidence score
-5. **Bill** — Stripe charges your card at $10 accumulated or end of month
+5. **Bill** — Your saved card is charged on a recurring basis for only what you consumed
 
 ## Features
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMeterStore } from "@/lib/store";
+import { useMeterStore, ChatMessage } from "@/lib/store";
 
 export function Inspector() {
   const {
@@ -8,21 +8,21 @@ export function Inspector() {
     setInspectorOpen,
     inspectorTab,
     setInspectorTab,
-    todayCost,
-    todayTokensIn,
-    todayTokensOut,
-    todayMessageCount,
-    todayByModel,
+    projects,
+    activeProjectId,
     spendingCap,
     setSpendingCap,
+    spendingCapEnabled,
+    setSpendingCapEnabled,
     email,
     logout,
-    messages,
   } = useMeterStore();
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
 
   if (!inspectorOpen) return null;
 
-  const tabs = ["usage", "billing", "settings"] as const;
+  const tabs = ["usage", "settings"] as const;
 
   return (
     <>
@@ -65,20 +65,23 @@ export function Inspector() {
         <div className="flex-1 overflow-y-auto p-4">
           {inspectorTab === "usage" && (
             <UsageTab
-              todayCost={todayCost}
-              todayTokensIn={todayTokensIn}
-              todayTokensOut={todayTokensOut}
-              todayMessageCount={todayMessageCount}
-              todayByModel={todayByModel}
+              todayCost={activeProject?.todayCost ?? 0}
+              todayTokensIn={activeProject?.todayTokensIn ?? 0}
+              todayTokensOut={activeProject?.todayTokensOut ?? 0}
+              todayMessageCount={activeProject?.todayMessageCount ?? 0}
+              todayByModel={activeProject?.todayByModel ?? {}}
               spendingCap={spendingCap}
-              messages={messages}
+              spendingCapEnabled={spendingCapEnabled}
+              messages={activeProject?.messages ?? []}
+              email={email}
             />
           )}
-          {inspectorTab === "billing" && <BillingTab />}
           {inspectorTab === "settings" && (
             <SettingsTab
               email={email}
               spendingCap={spendingCap}
+              spendingCapEnabled={spendingCapEnabled}
+              setSpendingCapEnabled={setSpendingCapEnabled}
               setSpendingCap={setSpendingCap}
             />
           )}
@@ -115,7 +118,9 @@ function UsageTab({
   todayMessageCount,
   todayByModel,
   spendingCap,
+  spendingCapEnabled,
   messages,
+  email,
 }: {
   todayCost: number;
   todayTokensIn: number;
@@ -123,7 +128,9 @@ function UsageTab({
   todayMessageCount: number;
   todayByModel: Record<string, { cost: number; count: number }>;
   spendingCap: number;
-  messages: ReturnType<typeof useMeterStore.getState>["messages"];
+  spendingCapEnabled: boolean;
+  messages: ChatMessage[];
+  email: string | null;
 }) {
   const settledCount = messages.filter((m) => m.role === "assistant" && m.settled).length;
   const pendingCount = messages.filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled).length;
@@ -137,14 +144,16 @@ function UsageTab({
         </div>
         <div className="flex items-baseline gap-2 mb-2">
           <span className="font-mono text-2xl text-foreground">${todayCost.toFixed(2)}</span>
-          <span className="font-mono text-[10px] text-muted-foreground/40">
-            of ${spendingCap.toFixed(0)} cap
-          </span>
+          {spendingCapEnabled && (
+            <span className="font-mono text-[10px] text-muted-foreground/40">
+              of ${spendingCap.toFixed(0)} cap
+            </span>
+          )}
         </div>
         <div className="h-1 w-full rounded-full bg-border overflow-hidden">
           <div
             className="h-full rounded-full bg-foreground/40 transition-all duration-300"
-            style={{ width: `${Math.min(100, (todayCost / spendingCap) * 100)}%` }}
+            style={{ width: `${Math.min(100, (todayCost / Math.max(spendingCap, 1)) * 100)}%` }}
           />
         </div>
       </div>
@@ -182,43 +191,7 @@ function UsageTab({
         </div>
       )}
 
-      {/* Recent messages */}
       <div className="h-px bg-border" />
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Recent
-        </div>
-        {messages
-          .filter((m) => m.role === "assistant" && m.cost !== undefined)
-          .slice(-10)
-          .reverse()
-          .map((m) => (
-            <div key={m.id} className="flex items-center justify-between py-1.5 border-b border-border/50">
-              <div className="flex items-center gap-2">
-                <span className={`h-1.5 w-1.5 rounded-full ${m.settled ? "bg-emerald-500" : "bg-yellow-500"}`} />
-                <span className="text-[10px] text-muted-foreground truncate max-w-[160px]">
-                  {m.content.slice(0, 40)}...
-                </span>
-              </div>
-              <span className="font-mono text-[10px] text-foreground shrink-0">
-                ${(m.cost ?? 0).toFixed(m.cost && m.cost < 0.01 ? 4 : 2)}
-              </span>
-            </div>
-          ))}
-        {messages.filter((m) => m.role === "assistant" && m.cost !== undefined).length === 0 && (
-          <p className="font-mono text-[10px] text-muted-foreground/40 text-center py-4">
-            No messages yet
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── BILLING TAB ─── */
-function BillingTab() {
-  return (
-    <div className="flex flex-col gap-4">
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Payment Method
@@ -232,35 +205,8 @@ function BillingTab() {
           </div>
           <div>
             <span className="text-xs text-foreground font-mono">&bull;&bull;&bull;&bull; 4242</span>
-            <span className="block text-[10px] text-muted-foreground/50">Expires 12/27</span>
+            <span className="block text-[10px] text-muted-foreground/50">{email ?? "account"}</span>
           </div>
-        </div>
-      </div>
-
-      <div className="h-px bg-border" />
-
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Billing Cycle
-        </div>
-        <StatRow label="Next charge" value="At $10 or monthly" />
-        <StatRow label="Current balance" value="$0.00" />
-        <StatRow label="Last charged" value="—" />
-      </div>
-
-      <div className="h-px bg-border" />
-
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          How Billing Works
-        </div>
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
-            Your card is charged when your balance reaches $10, or at the end of each month — whichever comes first.
-          </p>
-          <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
-            Each message shows its exact cost. No hidden fees, no subscription.
-          </p>
         </div>
       </div>
     </div>
@@ -272,9 +218,13 @@ function SettingsTab({
   email,
   spendingCap,
   setSpendingCap,
+  spendingCapEnabled,
+  setSpendingCapEnabled,
 }: {
   email: string | null;
   spendingCap: number;
+  spendingCapEnabled: boolean;
+  setSpendingCapEnabled: (v: boolean) => void;
   setSpendingCap: (v: number) => void;
 }) {
   return (
@@ -292,22 +242,29 @@ function SettingsTab({
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Daily Spending Cap
         </div>
-        <p className="font-mono text-[10px] text-muted-foreground/40 mb-2">
-          Stop sending messages once this limit is reached each day.
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-sm text-foreground">$</span>
+        <label className="mb-2 flex items-center gap-2 font-mono text-[10px] text-muted-foreground/80">
           <input
-            type="number"
-            value={spendingCap}
-            onChange={(e) => setSpendingCap(Number(e.target.value))}
-            step={1}
-            min={1}
-            max={100}
-            className="w-20 bg-transparent font-mono text-sm text-foreground border-b border-border focus:border-foreground focus:outline-none py-0.5"
+            type="checkbox"
+            checked={spendingCapEnabled}
+            onChange={(e) => setSpendingCapEnabled(e.target.checked)}
           />
-          <span className="font-mono text-[10px] text-muted-foreground/40">per day</span>
-        </div>
+          Enable daily cap
+        </label>
+        {spendingCapEnabled && (
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm text-foreground">$</span>
+            <input
+              type="number"
+              value={spendingCap}
+              onChange={(e) => setSpendingCap(Number(e.target.value))}
+              step={1}
+              min={1}
+              max={100}
+              className="w-20 border-b border-border bg-transparent py-0.5 font-mono text-sm text-foreground focus:border-foreground focus:outline-none"
+            />
+            <span className="font-mono text-[10px] text-muted-foreground/40">per day</span>
+          </div>
+        )}
       </div>
 
       <div className="h-px bg-border" />

@@ -9,6 +9,14 @@ export interface ModelConfig {
 
 export const MODELS: ModelConfig[] = [
   {
+    id: "auto",
+    name: "Auto",
+    provider: "Meter",
+    color: "#A1A1AA",
+    inputPrice: 3.0 / 1_000_000,
+    outputPrice: 15.0 / 1_000_000,
+  },
+  {
     id: "anthropic/claude-sonnet-4",
     name: "Sonnet 4",
     provider: "Anthropic",
