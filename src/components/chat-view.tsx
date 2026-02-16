@@ -3,7 +3,7 @@
 import { useRef, useEffect, useMemo, useState } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
-import { ModelPicker } from "@/components/model-picker";
+import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { getModel, shortModelName } from "@/lib/models";
 
@@ -74,9 +74,8 @@ export function ChatView() {
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
-  const [showHeaderMeterDropdown, setShowHeaderMeterDropdown] = useState(false);
-  const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
@@ -237,7 +236,7 @@ export function ChatView() {
       <div className={`flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2">
-            <img src="/logo-dark-copy.webp" alt="Meter" width={48} height={13} />
+            <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
           </div>
           <div className="relative flex items-center gap-2">
             <button
@@ -298,41 +297,33 @@ export function ChatView() {
           </div>
         </div>
 
-        <div className="border-t border-border p-4">
+        {/* Composer — no border-t divider, with fade gradient above */}
+        <div className="relative p-4 pt-0">
+          {/* Fade gradient so scrolling content dissolves above composer */}
+          <div className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-t from-background to-transparent" />
+
           <div className="mx-auto max-w-2xl">
-            <div className="relative pt-4">
-              <div className="absolute -top-5 inset-x-0 z-0">
-                <button
-                  onClick={() => setShowProjectDropdown((v) => !v)}
-                  className="w-full rounded-xl border border-border bg-card/95 px-4 py-2 text-left shadow-lg backdrop-blur transition-colors hover:border-foreground/20 hover:bg-card"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-foreground">{activeProject?.name ?? "Workspace"}</div>
-                    <div className="font-mono text-[10px] text-muted-foreground/70">Switch workspace</div>
-                  </div>
-                </button>
+            {/* Click-away backdrop when model picker is open */}
+            {modelPickerOpen && (
+              <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
+            )}
 
-                {showProjectDropdown && (
-                  <div className="absolute bottom-full left-0 right-0 z-20 mb-2 rounded-xl border border-border bg-card p-2 shadow-xl">
-                    {projects.map((project) => (
-                      <button
-                        key={project.id}
-                        onClick={() => handleProjectSwitch(project.id)}
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/5 ${project.id === activeProjectId ? "bg-foreground/[0.07]" : ""}`}
-                      >
-                        <div>
-                          <div className="text-sm text-foreground">{project.name}</div>
-                          <div className="font-mono text-[10px] text-muted-foreground/60">${project.totalCost.toFixed(2)} total</div>
-                        </div>
-                        {project.id === activeProjectId && <span className="font-mono text-[10px] text-muted-foreground">active</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {/* Unified composer container — picker panel + input are one box */}
+            <div className="relative z-40 rounded-xl border border-border bg-card">
+              {/* Model picker panel (expands inline above input) */}
+              {modelPickerOpen && (
+                <>
+                  <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
+                  <div className="h-px bg-border" />
+                </>
+              )}
 
-              <div className="relative z-10 flex items-end gap-2 rounded-xl border border-border bg-card p-2">
-                <ModelPicker />
+              {/* Input row */}
+              <div className="flex items-end gap-2 p-2">
+                <ModelPickerTrigger
+                  open={modelPickerOpen}
+                  onToggle={() => setModelPickerOpen(!modelPickerOpen)}
+                />
                 <textarea
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
@@ -346,7 +337,7 @@ export function ChatView() {
                     t.style.height = Math.min(t.scrollHeight, 120) + "px";
                   }}
                 />
-                <MeterPill onClick={openUsageInspector} value={todayCost} tokens={todayTokens} />
+                <MeterPill />
                 <button
                   onClick={handleSend}
                   disabled={isStreaming}
