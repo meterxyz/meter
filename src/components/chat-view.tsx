@@ -1,34 +1,32 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
-import { useMeterStore, Settlement } from "@/lib/store";
+import { useRef, useEffect, useMemo, useState, useCallback } from "react";
+import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
+import { ActionCard } from "@/components/action-card";
 import { DecisionsBar } from "@/components/decisions-bar";
 import { DecisionsPanel } from "@/components/decisions-panel";
 import { WorkspaceBar } from "@/components/workspace-bar";
-import { useWallets } from "@privy-io/react-auth";
-import { formatMemo, txExplorerUrl } from "@/lib/tempo";
-import { useSettlement } from "@/hooks/use-settlement";
-import { getModel } from "@/lib/models";
+import { getModel, shortModelName } from "@/lib/models";
 import { Decision } from "@/lib/decisions-store";
 
-/* ─── Receipt card (expandable) ────────────────────────────────── */
-function ReceiptCard({ settlement }: { settlement: Settlement }) {
-  const [open, setOpen] = useState(false);
-  const statusColor =
-    settlement.status === "settled"
-      ? "text-emerald-500"
-      : settlement.status === "failed"
-      ? "text-red-400"
-      : "text-yellow-500";
-  const statusLabel =
-    settlement.status === "settled"
-      ? "settled"
-      : settlement.status === "failed"
-      ? "failed"
-      : "settling...";
+function statusLabel(msg: ChatMessage) {
+  if (msg.receiptStatus === "settled") return "Settled";
+  if (msg.receiptStatus === "signed") return "Signed";
+  return "Signing";
+}
+
+function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string }) {
+  const hasCost = msg.cost !== undefined;
+
+  const modelName = msg.model ? shortModelName(msg.model) : "—";
+  const cost = msg.cost ?? 0;
+  const totalTokens = (msg.tokensIn ?? 0) + (msg.tokensOut ?? 0);
+  const isSigned = msg.receiptStatus === "signed" || msg.receiptStatus === "settled";
+
+  if (!hasCost) return null;
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground/70">
@@ -287,11 +285,8 @@ export function ChatView() {
     input.focus();
   }, []);
 
-  // Helper to find settlement for a message
-  const getSettlement = (settlementId?: string) => {
-    if (!settlementId) return null;
-    return settlements.find((s) => s.id === settlementId) ?? null;
-  };
+  const lastMsg = messages[messages.length - 1];
+  const showThinking = isStreaming && lastMsg?.role === "assistant" && lastMsg.content === "";
 
   return (
     <div className="flex h-screen bg-background">
@@ -347,7 +342,7 @@ export function ChatView() {
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-2xl px-4 py-6">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center gap-3 py-24">
@@ -403,9 +398,21 @@ export function ChatView() {
               {/* Decisions bar — top section */}
               <DecisionsBar />
 
+              {/* Model picker panel (expands inline) */}
+              {modelPickerOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
+                  <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
+                  <div className="h-px bg-border" />
+                </>
+              )}
+
               {/* Composer — middle section */}
               <div className="flex items-end gap-2 border-t border-border/50 p-2">
-                <ModelPicker />
+                <ModelPickerTrigger
+                  open={modelPickerOpen}
+                  onToggle={() => setModelPickerOpen(!modelPickerOpen)}
+                />
                 <textarea
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
@@ -419,7 +426,7 @@ export function ChatView() {
                     t.style.height = Math.min(t.scrollHeight, 120) + "px";
                   }}
                 />
-                <MeterPill />
+                <MeterPill onClick={openUsageInspector} value={todayCost} tokens={todayTokens} />
                 <button
                   onClick={handleSend}
                   disabled={isStreaming}
