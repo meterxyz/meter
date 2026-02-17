@@ -20,13 +20,11 @@ interface WorkspaceState {
   activeCompanyId: string | null;
   activeProjectId: string | null;
 
-  addCompany: (name: string) => string;
-  addProject: (companyId: string, name: string) => string;
+  // Combined create+activate actions (single set call, no cascading renders)
+  createCompany: (name: string) => string;
+  createProject: (companyId: string, name: string) => string;
   setActiveCompany: (id: string) => void;
   setActiveProject: (id: string | null) => void;
-  getActiveCompany: () => Company | null;
-  getActiveProject: () => Project | null;
-  getProjectsForCompany: (companyId: string) => Project[];
 }
 
 function generateId() {
@@ -35,24 +33,29 @@ function generateId() {
 
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       companies: [],
       projects: [],
       activeCompanyId: null,
       activeProjectId: null,
 
-      addCompany: (name: string) => {
+      // Add company AND activate it in a single set() — no cascading renders
+      createCompany: (name: string) => {
         const id = generateId();
         set((s) => ({
           companies: [...s.companies, { id, name, createdAt: Date.now() }],
+          activeCompanyId: id,
+          activeProjectId: null,
         }));
         return id;
       },
 
-      addProject: (companyId: string, name: string) => {
+      // Add project AND activate it in a single set()
+      createProject: (companyId: string, name: string) => {
         const id = generateId();
         set((s) => ({
           projects: [...s.projects, { id, companyId, name, createdAt: Date.now() }],
+          activeProjectId: id,
         }));
         return id;
       },
@@ -63,20 +66,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       setActiveProject: (id: string | null) => {
         set({ activeProjectId: id });
-      },
-
-      getActiveCompany: () => {
-        const { companies, activeCompanyId } = get();
-        return companies.find((c) => c.id === activeCompanyId) ?? null;
-      },
-
-      getActiveProject: () => {
-        const { projects, activeProjectId } = get();
-        return projects.find((p) => p.id === activeProjectId) ?? null;
-      },
-
-      getProjectsForCompany: (companyId: string) => {
-        return get().projects.filter((p) => p.companyId === companyId);
       },
     }),
     {

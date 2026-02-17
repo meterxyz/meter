@@ -14,7 +14,7 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   const companies = useWorkspaceStore((s) => s.companies);
-  const addCompany = useWorkspaceStore((s) => s.addCompany);
+  const createCompany = useWorkspaceStore((s) => s.createCompany);
   const setActiveCompany = useWorkspaceStore((s) => s.setActiveCompany);
 
   // Close on outside click
@@ -38,8 +38,8 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    const id = addCompany(name);
-    setActiveCompany(id);
+    // Single store set — create + activate in one call
+    createCompany(name);
     setNewName("");
     setCreating(false);
     setOpen(false);
