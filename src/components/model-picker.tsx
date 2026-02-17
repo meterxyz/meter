@@ -61,7 +61,10 @@ export function ModelPickerTrigger({
   onToggle: () => void;
 }) {
   const selectedModelId = useMeterStore((s) => s.selectedModelId);
-  const isStreaming = useMeterStore((s) => s.isStreaming);
+  const isStreaming = useMeterStore((s) => {
+    const project = s.projects.find((p) => p.id === s.activeProjectId) ?? s.projects[0];
+    return project?.isStreaming ?? false;
+  });
   const model = getModel(selectedModelId);
 
   return (
