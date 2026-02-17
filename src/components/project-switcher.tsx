@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useWorkspaceStore, Project } from "@/lib/workspace-store";
 
 interface ProjectSwitcherProps {
@@ -14,8 +14,13 @@ export function ProjectSwitcher({ activeProject, companyId }: ProjectSwitcherPro
   const [newName, setNewName] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  const projects = useWorkspaceStore((s) => s.projects.filter((p) => p.companyId === companyId));
-  const addProject = useWorkspaceStore((s) => s.addProject);
+  // Stable selector: grab all projects, filter in useMemo to avoid new-ref-every-render
+  const allProjects = useWorkspaceStore((s) => s.projects);
+  const projects = useMemo(
+    () => allProjects.filter((p) => p.companyId === companyId),
+    [allProjects, companyId]
+  );
+  const createProject = useWorkspaceStore((s) => s.createProject);
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
 
   // Close on outside click
@@ -39,8 +44,8 @@ export function ProjectSwitcher({ activeProject, companyId }: ProjectSwitcherPro
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    const id = addProject(companyId, name);
-    setActiveProject(id);
+    // Single store set — create + activate in one call
+    createProject(companyId, name);
     setNewName("");
     setCreating(false);
     setOpen(false);

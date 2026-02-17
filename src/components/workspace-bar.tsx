@@ -1,18 +1,25 @@
 "use client";
 
+import { useMemo } from "react";
 import { useWorkspaceStore } from "@/lib/workspace-store";
 import { CompanySwitcher } from "./company-switcher";
 import { ProjectSwitcher } from "./project-switcher";
 
 export function WorkspaceBar() {
-  const activeCompany = useWorkspaceStore((s) => {
-    const c = s.companies.find((c) => c.id === s.activeCompanyId);
-    return c ?? null;
-  });
-  const activeProject = useWorkspaceStore((s) => {
-    const p = s.projects.find((p) => p.id === s.activeProjectId);
-    return p ?? null;
-  });
+  // Select primitives + stable arrays — avoids new references on every render
+  const companies = useWorkspaceStore((s) => s.companies);
+  const projects = useWorkspaceStore((s) => s.projects);
+  const activeCompanyId = useWorkspaceStore((s) => s.activeCompanyId);
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+
+  const activeCompany = useMemo(
+    () => companies.find((c) => c.id === activeCompanyId) ?? null,
+    [companies, activeCompanyId]
+  );
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
 
   return (
     <div className="mt-2 flex items-center gap-3 font-mono text-[10px] text-muted-foreground/50">
