@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseServer } from "@/lib/supabase";
 import OpenAI from "openai";
 import crypto from "crypto";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
 
 function getOpenRouterClient() {
   return new OpenAI({
@@ -33,7 +26,7 @@ async function authenticateApiKey(req: NextRequest) {
 
   const apiKey = auth.slice(7); // strip "Bearer "
   const keyHash = hashKey(apiKey);
-  const supabase = getSupabase();
+  const supabase = getSupabaseServer();
 
   const { data: keyRecord } = await supabase
     .from("api_keys")
@@ -76,7 +69,7 @@ export async function POST(req: NextRequest) {
   });
 
   const encoder = new TextEncoder();
-  const supabase = getSupabase();
+  const supabase = getSupabaseServer();
   const userId = keyRecord.user_id;
   const keyId = keyRecord.id;
 
