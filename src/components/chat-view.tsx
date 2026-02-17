@@ -1,28 +1,34 @@
 "use client";
 
-import { useRef, useEffect, useMemo, useState, useCallback } from "react";
-import { useMeterStore, ChatMessage } from "@/lib/store";
+import { useRef, useEffect, useState, useCallback } from "react";
+import { useMeterStore, Settlement } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
-import { ActionCard } from "@/components/action-card";
-import { getModel, shortModelName } from "@/lib/models";
+import { DecisionsBar } from "@/components/decisions-bar";
+import { DecisionsPanel } from "@/components/decisions-panel";
+import { WorkspaceBar } from "@/components/workspace-bar";
+import { useWallets } from "@privy-io/react-auth";
+import { formatMemo, txExplorerUrl } from "@/lib/tempo";
+import { useSettlement } from "@/hooks/use-settlement";
+import { getModel } from "@/lib/models";
+import { Decision } from "@/lib/decisions-store";
 
-function statusLabel(msg: ChatMessage) {
-  if (msg.receiptStatus === "settled") return "Settled";
-  if (msg.receiptStatus === "signed") return "Signed";
-  return "Signing";
-}
-
-function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string }) {
-  const hasCost = msg.cost !== undefined;
-
-  const modelName = msg.model ? shortModelName(msg.model) : "—";
-  const cost = msg.cost ?? 0;
-  const totalTokens = (msg.tokensIn ?? 0) + (msg.tokensOut ?? 0);
-  const isSigned = msg.receiptStatus === "signed" || msg.receiptStatus === "settled";
-
-  if (!hasCost) return null;
+/* ─── Receipt card (expandable) ────────────────────────────────── */
+function ReceiptCard({ settlement }: { settlement: Settlement }) {
+  const [open, setOpen] = useState(false);
+  const statusColor =
+    settlement.status === "settled"
+      ? "text-emerald-500"
+      : settlement.status === "failed"
+      ? "text-red-400"
+      : "text-yellow-500";
+  const statusLabel =
+    settlement.status === "settled"
+      ? "settled"
+      : settlement.status === "failed"
+      ? "failed"
+      : "settling...";
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground/70">
@@ -267,8 +273,25 @@ export function ChatView() {
     }
   };
 
-  const lastMsg = messages[messages.length - 1];
-  const showThinking = isStreaming && lastMsg?.role === "assistant" && lastMsg.content === "";
+  // Revisit a decided item — sends context to the AI
+  const handleRevisit = useCallback((d: Decision) => {
+    const input = inputRef.current;
+    if (!input) return;
+    let msg = `I want to revisit the decision about "${d.title}".`;
+    if (d.choice) msg += `\nThe original choice was "${d.choice}"`;
+    if (d.reasoning) msg += ` because: ${d.reasoning}`;
+    msg += `\nWhat should we reconsider?`;
+    input.value = msg;
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    input.focus();
+  }, []);
+
+  // Helper to find settlement for a message
+  const getSettlement = (settlementId?: string) => {
+    if (!settlementId) return null;
+    return settlements.find((s) => s.id === settlementId) ?? null;
+  };
 
   return (
     <div className="flex h-screen bg-background">
@@ -324,7 +347,7 @@ export function ChatView() {
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-2xl px-4 py-6">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center gap-3 py-24">
@@ -367,93 +390,50 @@ export function ChatView() {
           </div>
         </div>
 
-        {/* Composer with workspace switcher */}
+        {/* Unified composer box: decisions bar + input + workspace bar */}
         <div className="border-t border-border p-4">
           <div className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-t from-background to-transparent" />
 
           <div className="mx-auto max-w-2xl">
-            {/* Click-away backdrops */}
-            {modelPickerOpen && (
-              <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
-            )}
-            {showProjectDropdown && (
-              <div className="fixed inset-0 z-30" onClick={() => setShowProjectDropdown(false)} />
-            )}
+            {/* Decisions drop-up panel (renders above the unified box) */}
+            <DecisionsPanel onRevisit={handleRevisit} />
 
-            <div className="relative pt-4">
-              {/* Workspace switcher — floats above the composer */}
-              <div className="absolute -top-5 inset-x-0 z-0">
+            {/* Unified box */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              {/* Decisions bar — top section */}
+              <DecisionsBar />
+
+              {/* Composer — middle section */}
+              <div className="flex items-end gap-2 border-t border-border/50 p-2">
+                <ModelPicker />
+                <textarea
+                  ref={inputRef}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Say something..."
+                  rows={1}
+                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  style={{ maxHeight: "120px" }}
+                  onInput={(e) => {
+                    const t = e.currentTarget;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 120) + "px";
+                  }}
+                />
+                <MeterPill />
                 <button
-                  onClick={() => setShowProjectDropdown((v) => !v)}
-                  className="w-full rounded-xl border border-border bg-card/95 px-4 py-2 text-left shadow-lg backdrop-blur transition-colors hover:border-foreground/20 hover:bg-card"
+                  onClick={handleSend}
+                  disabled={isStreaming}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-foreground">{activeProject?.name ?? "Workspace"}</div>
-                    <div className="font-mono text-[10px] text-muted-foreground/70">Switch workspace</div>
-                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
                 </button>
-
-                {showProjectDropdown && (
-                  <div className="absolute bottom-full left-0 right-0 z-20 mb-2 rounded-xl border border-border bg-card p-2 shadow-xl">
-                    {projects.map((project) => (
-                      <button
-                        key={project.id}
-                        onClick={() => handleProjectSwitch(project.id)}
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/5 ${project.id === activeProjectId ? "bg-foreground/[0.07]" : ""}`}
-                      >
-                        <div>
-                          <div className="text-sm text-foreground">{project.name}</div>
-                          <div className="font-mono text-[10px] text-muted-foreground/60">${project.totalCost.toFixed(2)} total</div>
-                        </div>
-                        {project.id === activeProjectId && <span className="font-mono text-[10px] text-muted-foreground">active</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
-              {/* Composer box */}
-              <div className="relative z-10 rounded-xl border border-border bg-card">
-                {/* Model picker panel (expands inline above input) */}
-                {modelPickerOpen && (
-                  <>
-                    <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
-                    <div className="h-px bg-border" />
-                  </>
-                )}
-
-                {/* Input row */}
-                <div className="flex items-end gap-2 p-2">
-                  <ModelPickerTrigger
-                    open={modelPickerOpen}
-                    onToggle={() => setModelPickerOpen(!modelPickerOpen)}
-                  />
-                  <textarea
-                    ref={inputRef}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Say something..."
-                    rows={1}
-                    className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                    style={{ maxHeight: "120px" }}
-                    onInput={(e) => {
-                      const t = e.currentTarget;
-                      t.style.height = "auto";
-                      t.style.height = Math.min(t.scrollHeight, 120) + "px";
-                    }}
-                  />
-                  <MeterPill onClick={openUsageInspector} value={todayCost} tokens={todayTokens} />
-                  <button
-                    onClick={handleSend}
-                    disabled={isStreaming}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="19" x2="12" y2="5" />
-                      <polyline points="5 12 12 5 19 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
+              {/* Company + Project — bottom section */}
+              <WorkspaceBar />
             </div>
             <p className="mt-2 font-mono text-[10px] text-muted-foreground/50">{todayMessageCount} msgs today in {activeProject?.name ?? "—"}</p>
           </div>

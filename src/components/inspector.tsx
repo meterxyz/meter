@@ -22,7 +22,7 @@ export function Inspector() {
 
   if (!inspectorOpen) return null;
 
-  const tabs = ["usage", "settings"] as const;
+  const tabs = ["wallet", "telemetry", "ledger", "permissions", "purchases", "hooks"] as const;
 
   return (
     <>
@@ -85,6 +85,8 @@ export function Inspector() {
               setSpendingCap={setSpendingCap}
             />
           )}
+          {inspectorTab === "purchases" && <PurchasesTab />}
+          {inspectorTab === "hooks" && <HooksTab events={events} />}
         </div>
 
         {/* Sign out */}
@@ -269,13 +271,83 @@ function SettingsTab({
 
       <div className="h-px bg-border" />
 
+      <button
+        onClick={onRevoke}
+        className="w-full rounded-lg border border-red-400/20 py-2 font-mono text-[11px] text-red-400 transition-colors hover:bg-red-400/10"
+      >
+        Revoke Session
+      </button>
+    </div>
+  );
+}
+
+/* ─── PURCHASES TAB ─── */
+function PurchasesTab() {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Virtual Cards */}
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Model Preferences
+          Virtual Cards
         </div>
-        <p className="font-mono text-[10px] text-muted-foreground/40">
-          Auto-routing picks the best model per message. You can override per-message in the composer.
-        </p>
+        <div className="flex flex-col items-center justify-center py-8 gap-3 rounded-lg border border-dashed border-border">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/30">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+          <span className="font-mono text-[11px] text-muted-foreground/40">
+            No virtual cards yet
+          </span>
+          <button
+            className="rounded-lg border border-border px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5"
+          >
+            + New Card
+          </button>
+          <span className="font-mono text-[9px] text-muted-foreground/30">
+            Provision cards for your AI agent to make purchases
+          </span>
+        </div>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Purchase History */}
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Purchase History
+        </div>
+        <div className="flex flex-col items-center justify-center py-6 gap-2">
+          <span className="font-mono text-xs text-muted-foreground/40">No purchases yet</span>
+          <span className="font-mono text-[10px] text-muted-foreground/30">
+            Purchases made by your agent appear here
+          </span>
+        </div>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Spend Controls */}
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Agent Spend Controls
+        </div>
+        <StatRow label="Daily Limit" value="$0.00" />
+        <StatRow label="Monthly Limit" value="$0.00" />
+        <StatRow label="Per-Transaction Max" value="$0.00" />
+      </div>
+    </div>
+  );
+}
+
+/* ─── HOOKS TAB ─── */
+function HooksTab({ events }: { events: ReturnType<typeof useMeterStore.getState>["events"] }) {
+  if (events.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-2">
+        <span className="font-mono text-xs text-muted-foreground/60">No events yet</span>
+        <span className="font-mono text-[10px] text-muted-foreground/40">
+          Events stream here in real-time
+        </span>
       </div>
 
       <div className="h-px bg-border" />
