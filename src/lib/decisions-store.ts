@@ -4,6 +4,7 @@ export interface Decision {
   id: string;
   title: string;
   status: "undecided" | "decided";
+  archived?: boolean;
   choice?: string;
   alternatives?: string[];
   reasoning?: string;
@@ -27,6 +28,7 @@ interface DecisionsState {
   deleteDecision: (id: string) => void;
   resolveDecision: (id: string, choice: string, reasoning?: string) => void;
   reopenDecision: (id: string) => void;
+  archiveDecision: (id: string) => void;
 }
 
 function generateId() {
@@ -80,6 +82,15 @@ export const useDecisionsStore = create<DecisionsState>((set) => ({
       decisions: s.decisions.map((d) =>
         d.id === id
           ? { ...d, status: "undecided" as const, updatedAt: Date.now() }
+          : d
+      ),
+    })),
+
+  archiveDecision: (id) =>
+    set((s) => ({
+      decisions: s.decisions.map((d) =>
+        d.id === id
+          ? { ...d, archived: true, updatedAt: Date.now() }
           : d
       ),
     })),
