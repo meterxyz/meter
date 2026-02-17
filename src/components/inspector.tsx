@@ -22,7 +22,7 @@ export function Inspector() {
 
   if (!inspectorOpen) return null;
 
-  const tabs = ["wallet", "telemetry", "ledger", "permissions", "purchases", "hooks"] as const;
+  const tabs = ["usage", "purchases", "settings"] as const;
 
   return (
     <>
@@ -76,6 +76,7 @@ export function Inspector() {
               email={email}
             />
           )}
+          {inspectorTab === "purchases" && <PurchasesTab />}
           {inspectorTab === "settings" && (
             <SettingsTab
               email={email}
@@ -85,8 +86,6 @@ export function Inspector() {
               setSpendingCap={setSpendingCap}
             />
           )}
-          {inspectorTab === "purchases" && <PurchasesTab />}
-          {inspectorTab === "hooks" && <HooksTab events={events} />}
         </div>
 
         {/* Sign out */}
@@ -271,12 +270,25 @@ function SettingsTab({
 
       <div className="h-px bg-border" />
 
-      <button
-        onClick={onRevoke}
-        className="w-full rounded-lg border border-red-400/20 py-2 font-mono text-[11px] text-red-400 transition-colors hover:bg-red-400/10"
-      >
-        Revoke Session
-      </button>
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Model Preferences
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground/40">
+          Auto-routing picks the best model per message. You can override per-message in the composer.
+        </p>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Data
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground/40 mb-2">
+          Your conversation persists as one eternal session.
+        </p>
+      </div>
     </div>
   );
 }
@@ -334,31 +346,6 @@ function PurchasesTab() {
         <StatRow label="Daily Limit" value="$0.00" />
         <StatRow label="Monthly Limit" value="$0.00" />
         <StatRow label="Per-Transaction Max" value="$0.00" />
-      </div>
-    </div>
-  );
-}
-
-/* ─── HOOKS TAB ─── */
-function HooksTab({ events }: { events: ReturnType<typeof useMeterStore.getState>["events"] }) {
-  if (events.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 gap-2">
-        <span className="font-mono text-xs text-muted-foreground/60">No events yet</span>
-        <span className="font-mono text-[10px] text-muted-foreground/40">
-          Events stream here in real-time
-        </span>
-      </div>
-
-      <div className="h-px bg-border" />
-
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Data
-        </div>
-        <p className="font-mono text-[10px] text-muted-foreground/40 mb-2">
-          Your conversation persists as one eternal session.
-        </p>
       </div>
     </div>
   );
