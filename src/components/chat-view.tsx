@@ -93,6 +93,7 @@ export function ChatView() {
   const messages = activeProject?.messages ?? [];
   const isStreaming = activeProject?.isStreaming ?? false;
   const todayCost = activeProject?.todayCost ?? 0;
+  const todayTokens = (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -131,6 +132,11 @@ export function ChatView() {
     setInspectorOpen(true);
     setInspectorTab("usage");
   }, [setInspectorOpen, setInspectorTab]);
+
+  const openUsageInspector = () => {
+    setInspectorOpen(true);
+    setInspectorTab("usage");
+  };
 
   const handleProjectSwitch = (projectId: string) => {
     if (projectId === activeProjectId) {
@@ -361,57 +367,92 @@ export function ChatView() {
           </div>
         </div>
 
-        {/* Composer — no border-t divider, with fade gradient above */}
-        <div className="relative p-4 pt-0">
-          {/* Fade gradient so scrolling content dissolves above composer */}
+        {/* Composer with workspace switcher */}
+        <div className="border-t border-border p-4">
           <div className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-t from-background to-transparent" />
 
           <div className="mx-auto max-w-2xl">
-            {/* Click-away backdrop when model picker is open */}
+            {/* Click-away backdrops */}
             {modelPickerOpen && (
               <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
             )}
+            {showProjectDropdown && (
+              <div className="fixed inset-0 z-30" onClick={() => setShowProjectDropdown(false)} />
+            )}
 
-            {/* Unified composer container — picker panel + input are one box */}
-            <div className="relative z-40 rounded-xl border border-border bg-card">
-              {/* Model picker panel (expands inline above input) */}
-              {modelPickerOpen && (
-                <>
-                  <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
-                  <div className="h-px bg-border" />
-                </>
-              )}
-
-              {/* Input row */}
-              <div className="flex items-end gap-2 p-2">
-                <ModelPickerTrigger
-                  open={modelPickerOpen}
-                  onToggle={() => setModelPickerOpen(!modelPickerOpen)}
-                />
-                <textarea
-                  ref={inputRef}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Say something..."
-                  rows={1}
-                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                  style={{ maxHeight: "120px" }}
-                  onInput={(e) => {
-                    const t = e.currentTarget;
-                    t.style.height = "auto";
-                    t.style.height = Math.min(t.scrollHeight, 120) + "px";
-                  }}
-                />
-                <MeterPill />
+            <div className="relative pt-4">
+              {/* Workspace switcher — floats above the composer */}
+              <div className="absolute -top-5 inset-x-0 z-0">
                 <button
-                  onClick={handleSend}
-                  disabled={isStreaming}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
+                  onClick={() => setShowProjectDropdown((v) => !v)}
+                  className="w-full rounded-xl border border-border bg-card/95 px-4 py-2 text-left shadow-lg backdrop-blur transition-colors hover:border-foreground/20 hover:bg-card"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="19" x2="12" y2="5" />
-                    <polyline points="5 12 12 5 19 12" />
-                  </svg>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm text-foreground">{activeProject?.name ?? "Workspace"}</div>
+                    <div className="font-mono text-[10px] text-muted-foreground/70">Switch workspace</div>
+                  </div>
                 </button>
+
+                {showProjectDropdown && (
+                  <div className="absolute bottom-full left-0 right-0 z-20 mb-2 rounded-xl border border-border bg-card p-2 shadow-xl">
+                    {projects.map((project) => (
+                      <button
+                        key={project.id}
+                        onClick={() => handleProjectSwitch(project.id)}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/5 ${project.id === activeProjectId ? "bg-foreground/[0.07]" : ""}`}
+                      >
+                        <div>
+                          <div className="text-sm text-foreground">{project.name}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground/60">${project.totalCost.toFixed(2)} total</div>
+                        </div>
+                        {project.id === activeProjectId && <span className="font-mono text-[10px] text-muted-foreground">active</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Composer box */}
+              <div className="relative z-10 rounded-xl border border-border bg-card">
+                {/* Model picker panel (expands inline above input) */}
+                {modelPickerOpen && (
+                  <>
+                    <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
+                    <div className="h-px bg-border" />
+                  </>
+                )}
+
+                {/* Input row */}
+                <div className="flex items-end gap-2 p-2">
+                  <ModelPickerTrigger
+                    open={modelPickerOpen}
+                    onToggle={() => setModelPickerOpen(!modelPickerOpen)}
+                  />
+                  <textarea
+                    ref={inputRef}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Say something..."
+                    rows={1}
+                    className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                    style={{ maxHeight: "120px" }}
+                    onInput={(e) => {
+                      const t = e.currentTarget;
+                      t.style.height = "auto";
+                      t.style.height = Math.min(t.scrollHeight, 120) + "px";
+                    }}
+                  />
+                  <MeterPill onClick={openUsageInspector} value={todayCost} tokens={todayTokens} />
+                  <button
+                    onClick={handleSend}
+                    disabled={isStreaming}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="19" x2="12" y2="5" />
+                      <polyline points="5 12 12 5 19 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             <p className="mt-2 font-mono text-[10px] text-muted-foreground/50">{todayMessageCount} msgs today in {activeProject?.name ?? "—"}</p>
