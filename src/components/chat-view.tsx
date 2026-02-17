@@ -1,14 +1,18 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useMeterStore, Settlement } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPicker } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
+import { DecisionsBar } from "@/components/decisions-bar";
+import { DecisionsPanel } from "@/components/decisions-panel";
+import { WorkspaceBar } from "@/components/workspace-bar";
 import { useWallets } from "@privy-io/react-auth";
 import { formatMemo, txExplorerUrl } from "@/lib/tempo";
 import { useSettlement } from "@/hooks/use-settlement";
 import { getModel } from "@/lib/models";
+import { Decision } from "@/lib/decisions-store";
 
 /* ─── Receipt card (expandable) ────────────────────────────────── */
 function ReceiptCard({ settlement }: { settlement: Settlement }) {
@@ -297,6 +301,20 @@ export function ChatView() {
     }
   };
 
+  // Revisit a decided item — sends context to the AI
+  const handleRevisit = useCallback((d: Decision) => {
+    const input = inputRef.current;
+    if (!input) return;
+    let msg = `I want to revisit the decision about "${d.title}".`;
+    if (d.choice) msg += `\nThe original choice was "${d.choice}"`;
+    if (d.reasoning) msg += ` because: ${d.reasoning}`;
+    msg += `\nWhat should we reconsider?`;
+    input.value = msg;
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    input.focus();
+  }, []);
+
   // Helper to find settlement for a message
   const getSettlement = (settlementId?: string) => {
     if (!settlementId) return null;
@@ -341,7 +359,7 @@ export function ChatView() {
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-2xl px-4 py-6">
             {/* Disclaimer bubble */}
             <div className="mb-4 flex justify-start">
@@ -397,35 +415,48 @@ export function ChatView() {
           </div>
         </div>
 
-        {/* Composer */}
+        {/* Unified composer box: decisions bar + input + workspace bar */}
         <div className="border-t border-border p-4">
           <div className="mx-auto max-w-2xl">
-            <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2">
-              <ModelPicker />
-              <textarea
-                ref={inputRef}
-                onKeyDown={handleKeyDown}
-                placeholder="Say something..."
-                rows={1}
-                className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                style={{ maxHeight: "120px" }}
-                onInput={(e) => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 120) + "px";
-                }}
-              />
-              <MeterPill />
-              <button
-                onClick={handleSend}
-                disabled={isStreaming}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
-                </svg>
-              </button>
+            {/* Decisions drop-up panel (renders above the unified box) */}
+            <DecisionsPanel onRevisit={handleRevisit} />
+
+            {/* Unified box */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              {/* Decisions bar — top section */}
+              <DecisionsBar />
+
+              {/* Composer — middle section */}
+              <div className="flex items-end gap-2 border-t border-border/50 p-2">
+                <ModelPicker />
+                <textarea
+                  ref={inputRef}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Say something..."
+                  rows={1}
+                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  style={{ maxHeight: "120px" }}
+                  onInput={(e) => {
+                    const t = e.currentTarget;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 120) + "px";
+                  }}
+                />
+                <MeterPill />
+                <button
+                  onClick={handleSend}
+                  disabled={isStreaming}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Company + Project — bottom section */}
+              <WorkspaceBar />
             </div>
           </div>
         </div>

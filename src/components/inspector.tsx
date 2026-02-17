@@ -44,7 +44,7 @@ export function Inspector() {
 
   if (!inspectorOpen) return null;
 
-  const tabs = ["wallet", "telemetry", "ledger", "permissions", "hooks"] as const;
+  const tabs = ["wallet", "telemetry", "ledger", "permissions", "purchases", "hooks"] as const;
 
   return (
     <>
@@ -111,6 +111,7 @@ export function Inspector() {
               onRevoke={revoke}
             />
           )}
+          {inspectorTab === "purchases" && <PurchasesTab />}
           {inspectorTab === "hooks" && <HooksTab events={events} />}
         </div>
 
@@ -487,6 +488,64 @@ function PermissionsTab({
       >
         Revoke Session
       </button>
+    </div>
+  );
+}
+
+/* ─── PURCHASES TAB ─── */
+function PurchasesTab() {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Virtual Cards */}
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Virtual Cards
+        </div>
+        <div className="flex flex-col items-center justify-center py-8 gap-3 rounded-lg border border-dashed border-border">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/30">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+          <span className="font-mono text-[11px] text-muted-foreground/40">
+            No virtual cards yet
+          </span>
+          <button
+            className="rounded-lg border border-border px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5"
+          >
+            + New Card
+          </button>
+          <span className="font-mono text-[9px] text-muted-foreground/30">
+            Provision cards for your AI agent to make purchases
+          </span>
+        </div>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Purchase History */}
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Purchase History
+        </div>
+        <div className="flex flex-col items-center justify-center py-6 gap-2">
+          <span className="font-mono text-xs text-muted-foreground/40">No purchases yet</span>
+          <span className="font-mono text-[10px] text-muted-foreground/30">
+            Purchases made by your agent appear here
+          </span>
+        </div>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Spend Controls */}
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Agent Spend Controls
+        </div>
+        <StatRow label="Daily Limit" value="$0.00" />
+        <StatRow label="Monthly Limit" value="$0.00" />
+        <StatRow label="Per-Transaction Max" value="$0.00" />
+      </div>
     </div>
   );
 }
