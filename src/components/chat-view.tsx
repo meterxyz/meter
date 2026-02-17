@@ -385,18 +385,16 @@ export function ChatView() {
           </div>
         </div>
 
-        {/* Unified composer box: decisions bar + input + workspace bar */}
-        <div className="border-t border-border p-4">
-          <div className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-t from-background to-transparent" />
-
+        {/* Composer area */}
+        <div className="p-4">
           <div className="mx-auto max-w-2xl">
-            {/* Decisions drop-up panel (renders above the unified box) */}
-            <DecisionsPanel onRevisit={handleRevisit} />
-
             {/* Unified box */}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               {/* Decisions bar — top section */}
               <DecisionsBar />
+
+              {/* Decisions panel — expands inside the card, pushes content up */}
+              <DecisionsPanel onRevisit={handleRevisit} />
 
               {/* Model picker panel (expands inline) */}
               {modelPickerOpen && (
@@ -438,11 +436,10 @@ export function ChatView() {
                   </svg>
                 </button>
               </div>
-
-              {/* Company + Project — bottom section */}
-              <WorkspaceBar />
             </div>
-            <p className="mt-2 font-mono text-[10px] text-muted-foreground/50">{todayMessageCount} msgs today in {activeProject?.name ?? "—"}</p>
+
+            {/* Workspace picker — plain text below the box */}
+            <WorkspaceBar />
           </div>
         </div>
       </div>
