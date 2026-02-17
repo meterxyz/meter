@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useWorkspaceStore, Company } from "@/lib/workspace-store";
-import { useMeterStore } from "@/lib/store";
 
 interface CompanySwitcherProps {
   activeCompany: Company | null;
@@ -17,12 +16,10 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
   const companies = useWorkspaceStore((s) => s.companies);
   const addCompany = useWorkspaceStore((s) => s.addCompany);
   const setActiveCompany = useWorkspaceStore((s) => s.setActiveCompany);
-  const resetMeter = useMeterStore((s) => s.reset);
 
   const handleSelect = (id: string) => {
     if (id !== activeCompany?.id) {
       setActiveCompany(id);
-      resetMeter();
     }
     setOpen(false);
   };
@@ -31,11 +28,11 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
     const name = newName.trim();
     if (!name) return;
     const id = addCompany(name);
-    setActiveCompany(id);
-    resetMeter();
     setNewName("");
     setCreating(false);
     setOpen(false);
+    // Defer company activation to avoid update cascade with Popover closing
+    requestAnimationFrame(() => setActiveCompany(id));
   };
 
   return (
