@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseServer } from "@/lib/supabase";
 import crypto from "crypto";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
 
 function generateApiKey(): string {
   const raw = crypto.randomBytes(24).toString("base64url");
@@ -20,7 +13,7 @@ function hashKey(key: string): string {
 
 // GET — list keys for a wallet
 export async function GET(req: NextRequest) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseServer();
   const walletAddress = req.nextUrl.searchParams.get("walletAddress");
   if (!walletAddress) {
     return NextResponse.json({ error: "walletAddress required" }, { status: 400 });
@@ -48,7 +41,7 @@ export async function GET(req: NextRequest) {
 
 // POST — create a new key
 export async function POST(req: NextRequest) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseServer();
   const { walletAddress } = await req.json();
   if (!walletAddress) {
     return NextResponse.json({ error: "walletAddress required" }, { status: 400 });
@@ -93,7 +86,7 @@ export async function POST(req: NextRequest) {
 
 // DELETE — revoke a key
 export async function DELETE(req: NextRequest) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseServer();
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });

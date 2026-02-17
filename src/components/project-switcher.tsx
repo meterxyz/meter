@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore, Project } from "@/lib/workspace-store";
 
 interface ProjectSwitcherProps {
@@ -13,10 +12,24 @@ export function ProjectSwitcher({ activeProject, companyId }: ProjectSwitcherPro
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
 
   const projects = useWorkspaceStore((s) => s.projects.filter((p) => p.companyId === companyId));
   const addProject = useWorkspaceStore((s) => s.addProject);
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreating(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   const handleSelect = (id: string | null) => {
     setActiveProject(id);
@@ -34,27 +47,23 @@ export function ProjectSwitcher({ activeProject, companyId }: ProjectSwitcherPro
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-          <span>{activeProject?.name ?? "All tracks"}</span>
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-52 p-0">
-        <div className="p-2">
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span>{activeProject?.name ?? "All tracks"}</span>
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full right-0 mb-2 w-52 rounded-md border border-border bg-popover p-2 shadow-md z-50">
           <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider px-2 py-1">
             Tracks
           </div>
@@ -96,10 +105,7 @@ export function ProjectSwitcher({ activeProject, companyId }: ProjectSwitcherPro
                 placeholder="Track name..."
                 className="flex-1 rounded-md border border-border bg-transparent px-2 py-1 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
               />
-              <button
-                onClick={handleCreate}
-                className="rounded-md bg-foreground px-2 py-1 font-mono text-[10px] text-background hover:bg-foreground/90"
-              >
+              <button onClick={handleCreate} className="rounded-md bg-foreground px-2 py-1 font-mono text-[10px] text-background hover:bg-foreground/90">
                 Add
               </button>
             </div>
@@ -116,7 +122,7 @@ export function ProjectSwitcher({ activeProject, companyId }: ProjectSwitcherPro
             </button>
           )}
         </div>
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   );
 }

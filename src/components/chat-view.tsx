@@ -11,6 +11,7 @@ import { DecisionsPanel } from "@/components/decisions-panel";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
 import { Decision } from "@/lib/decisions-store";
+import { useSessionSync } from "@/lib/use-session-sync";
 
 function statusLabel(msg: ChatMessage) {
   if (msg.receiptStatus === "settled") return "Settled";
@@ -76,6 +77,9 @@ function ThinkingIndicator() {
 
 /* ─── Main ChatView ────────────────────────────────────────────── */
 export function ChatView() {
+  // Sync sessions to Supabase for eternal persistence
+  useSessionSync();
+
   const {
     projects,
     activeProjectId,
