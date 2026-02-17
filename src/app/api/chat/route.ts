@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
             }
 
             if (chunk.usage) {
-              const selfConfidence = typeof (chunk as { confidence?: unknown }).confidence === "number"
-                ? ((chunk as { confidence: number }).confidence)
+              const selfConfidence = typeof (chunk as unknown as { confidence?: unknown }).confidence === "number"
+                ? ((chunk as unknown as { confidence: number }).confidence)
                 : undefined;
               controller.enqueue(
                 encoder.encode(

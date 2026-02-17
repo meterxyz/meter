@@ -4,6 +4,16 @@ import { DEFAULT_MODEL, getModel } from "@/lib/models";
 
 export type ReceiptStatus = "signing" | "signed" | "settled";
 
+export interface ActionCard {
+  id: string;
+  type: "domain" | "service" | "action";
+  title: string;
+  description: string;
+  cost?: number;
+  status: "pending" | "approved" | "rejected";
+  metadata?: Record<string, string>;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -18,6 +28,7 @@ export interface ChatMessage {
   signature?: string;
   txHash?: string;
   timestamp: number;
+  cards?: ActionCard[];
 }
 
 interface ProjectThread {
@@ -47,6 +58,8 @@ interface MeterState {
   projects: ProjectThread[];
   activeProjectId: string;
 
+  pendingCharges: { id: string; title: string; cost: number }[];
+
   inspectorOpen: boolean;
   inspectorTab: string;
 
@@ -62,6 +75,9 @@ interface MeterState {
   finalizeResponse: (tokensIn: number, tokensOut: number, confidence: number) => void;
   setStreaming: (v: boolean) => void;
   markSettled: (messageId: string) => void;
+
+  approveCard: (messageId: string, cardId: string) => void;
+  rejectCard: (messageId: string, cardId: string) => void;
 
   toggleInspector: () => void;
   setInspectorOpen: (v: boolean) => void;
@@ -140,6 +156,8 @@ export const useMeterStore = create<MeterState>()(
       projects: initialProjects,
       activeProjectId: "meter",
 
+      pendingCharges: [],
+
       inspectorOpen: false,
       inspectorTab: "usage",
 
@@ -155,6 +173,7 @@ export const useMeterStore = create<MeterState>()(
           projects: initialProjects,
           activeProjectId: "meter",
           inspectorOpen: false,
+          pendingCharges: [],
         }),
 
       addProject: (name) =>
@@ -270,6 +289,43 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, updated) };
         }),
 
+      approveCard: (messageId, cardId) =>
+        set((s) => {
+          const active = getActiveProject(s);
+          const updated = {
+            ...active,
+            messages: active.messages.map((m) => {
+              if (m.id !== messageId) return m;
+              const cards = m.cards?.map((c) =>
+                c.id === cardId ? { ...c, status: "approved" as const } : c
+              );
+              return { ...m, cards };
+            }),
+          };
+          const card = active.messages.find((m) => m.id === messageId)?.cards?.find((c) => c.id === cardId);
+          const newCharge =
+            card && card.cost
+              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost }]
+              : s.pendingCharges;
+          return { projects: replaceActiveProject(s, updated), pendingCharges: newCharge };
+        }),
+
+      rejectCard: (messageId, cardId) =>
+        set((s) => {
+          const active = getActiveProject(s);
+          const updated = {
+            ...active,
+            messages: active.messages.map((m) => {
+              if (m.id !== messageId) return m;
+              const cards = m.cards?.map((c) =>
+                c.id === cardId ? { ...c, status: "rejected" as const } : c
+              );
+              return { ...m, cards };
+            }),
+          };
+          return { projects: replaceActiveProject(s, updated) };
+        }),
+
       setStreaming: (v) =>
         set((s) => {
           const active = getActiveProject(s);
@@ -286,8 +342,8 @@ export const useMeterStore = create<MeterState>()(
 
       reset: () =>
         set((s) => ({
-          projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false }),
-          ),
+          projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false })),
+          pendingCharges: [],
         })),
     }),
     {
