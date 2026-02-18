@@ -21,85 +21,22 @@ function statusLabel(msg: ChatMessage) {
 }
 
 function ErrorCard({ payload }: { payload: string }) {
-  const setSelectedModelId = useMeterStore((s) => s.setSelectedModelId);
-  let code = "unknown";
   let model = "";
-  let provider = "";
-  let retryAfter: string | null = null;
   try {
     const parsed = JSON.parse(payload);
-    code = parsed.code ?? "unknown";
     model = parsed.model ?? "";
-    provider = parsed.provider ?? "";
-    retryAfter = parsed.retryAfter ?? null;
   } catch { /* ignore */ }
 
   const modelLabel = model ? shortModelName(model) : "This model";
-  const providerLabel = provider || "the provider";
-
-  // Format reset time if available
-  let resetLabel = "";
-  if (retryAfter) {
-    const secs = Number(retryAfter);
-    if (!isNaN(secs) && secs > 0) {
-      const mins = Math.ceil(secs / 60);
-      resetLabel = mins <= 1 ? "resets in ~1 minute" : `resets in ~${mins} minutes`;
-    } else {
-      const date = new Date(retryAfter);
-      if (!isNaN(date.getTime())) {
-        const diffMs = date.getTime() - Date.now();
-        if (diffMs > 0) {
-          const mins = Math.ceil(diffMs / 60000);
-          resetLabel = mins <= 1 ? "resets in ~1 minute" : `resets in ~${mins} minutes`;
-        }
-      }
-    }
-  }
-
-  // Clean, user-facing messages only — never expose raw API errors
-  const messages: Record<string, { headline: string; detail?: string }> = {
-    rate_limit: {
-      headline: `${modelLabel} is being rate-limited by ${providerLabel}${resetLabel ? ` \u2014 ${resetLabel}` : ""}. Switch to Auto to continue the conversation.`,
-    },
-    insufficient_credits: {
-      headline: `${modelLabel} is temporarily unavailable due to usage limits. Switch to Auto or try a different model.`,
-    },
-    capacity: {
-      headline: `${modelLabel} is temporarily at capacity on ${providerLabel}. Switch to Auto or try again shortly.`,
-    },
-    auth: {
-      headline: `${modelLabel} could not be reached due to a configuration issue. Try a different model.`,
-    },
-    bad_request: {
-      headline: `${modelLabel} couldn\u2019t process this request. Try rephrasing or switching models.`,
-    },
-    server_error: {
-      headline: `${modelLabel} is experiencing issues on ${providerLabel}. Switch to Auto or try again shortly.`,
-    },
-    unknown: {
-      headline: `${modelLabel} is temporarily unavailable. Switch to Auto to continue the conversation.`,
-    },
-  };
-
-  const { headline, detail } = messages[code] ?? messages.unknown;
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-        <div className="flex flex-col gap-1">
-          <p className="font-mono text-[11px] text-foreground/70">{headline}</p>
-          {detail && (
-            <p className="font-mono text-[10px] text-muted-foreground/50">{detail}</p>
-          )}
-        </div>
+        <p className="font-mono text-[11px] text-foreground/70">
+          {modelLabel} is temporarily unavailable across all providers. Please try again in a moment.
+        </p>
       </div>
-      <button
-        onClick={() => setSelectedModelId("auto")}
-        className="self-start rounded-md bg-foreground/10 px-3 py-1.5 font-mono text-[11px] text-foreground/80 hover:bg-foreground/15 transition-colors"
-      >
-        Switch to Auto
-      </button>
     </div>
   );
 }
@@ -164,8 +101,15 @@ const TOOL_LABELS: Record<string, string> = {
   supabase_list_tables: "Listing tables",
 };
 
-function ThinkingIndicator({ toolName }: { toolName?: string | null }) {
-  const label = toolName ? TOOL_LABELS[toolName] ?? toolName : "Thinking";
+function ThinkingIndicator({ toolName, rerouting }: { toolName?: string | null; rerouting?: { provider: string; toModel: string } | null }) {
+  let label: string;
+  if (rerouting) {
+    const toLabel = shortModelName(rerouting.toModel);
+    label = `Re-routing to ${toLabel}`;
+  } else {
+    label = toolName ? TOOL_LABELS[toolName] ?? toolName : "Thinking";
+  }
+
   return (
     <div className="flex items-center gap-2 px-4 py-3 mb-4">
       <svg
@@ -230,6 +174,7 @@ export function ChatView() {
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [rerouting, setRerouting] = useState<{ provider: string; toModel: string } | null>(null);
   const isNearBottomRef = useRef(true);
   const hasInitialScrolled = useRef(false);
 
@@ -399,6 +344,7 @@ export function ChatView() {
             if (data.type === "delta") {
               fullContent += data.content;
               setActiveTool(null);
+              setRerouting(null);
               updateLastAssistantMessage(fullContent, data.tokensOut);
             } else if (data.type === "tool_call") {
               setActiveTool(data.name as string);
@@ -413,12 +359,13 @@ export function ChatView() {
                   reasoning: d.reasoning ?? undefined,
                 });
               }
+            } else if (data.type === "rerouting") {
+              // Show rerouting status line — the fallback system is switching models
+              setRerouting({ provider: data.provider as string, toModel: data.to as string });
             } else if (data.type === "error") {
               const errorPayload = JSON.stringify({
                 code: data.code,
                 model: data.model,
-                provider: data.provider,
-                retryAfter: data.retryAfter,
               });
               fullContent = `__error__${errorPayload}`;
               updateLastAssistantMessage(fullContent, 0);
@@ -441,6 +388,7 @@ export function ChatView() {
     } finally {
       setStreaming(false);
       setActiveTool(null);
+      setRerouting(null);
     }
   };
 
@@ -463,7 +411,7 @@ export function ChatView() {
   const connectedServices = useMeterStore((s) => s.connectedServices);
 
   const lastMsg = messages[messages.length - 1];
-  const showThinking = isStreaming && (activeTool || (lastMsg?.role === "assistant" && lastMsg.content === ""));
+  const showThinking = isStreaming && (rerouting || activeTool || (lastMsg?.role === "assistant" && lastMsg.content === ""));
 
   return (
     <div className="flex h-screen bg-background">
@@ -563,7 +511,7 @@ export function ChatView() {
             ))}
 
             {/* Thinking / tool indicator — shows when waiting or using tools */}
-            {showThinking && <ThinkingIndicator toolName={activeTool} />}
+            {showThinking && <ThinkingIndicator toolName={activeTool} rerouting={rerouting} />}
 
             {/* Scroll anchor */}
             <div ref={bottomRef} data-scroll-anchor />
