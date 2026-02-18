@@ -6,7 +6,7 @@ import { useMeterStore } from "@/lib/store";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 
 export function LoginScreen() {
-  const { setAuth, setCardOnFile, setGmailConnected } = useMeterStore();
+  const { setAuth, setCardOnFile, connectService } = useMeterStore();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -129,7 +129,7 @@ export function LoginScreen() {
       setCardOnFile(true, user.cardLast4 ?? undefined);
     }
     if (user.gmailConnected) {
-      setGmailConnected(true);
+      connectService("gmail");
     }
   };
 

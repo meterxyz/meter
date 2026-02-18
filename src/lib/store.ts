@@ -52,7 +52,7 @@ interface MeterState {
   cardOnFile: boolean;
   cardLast4: string | null;
   stripeCustomerId: string | null;
-  gmailConnected: boolean;
+  connectedServices: Record<string, boolean>;
 
   selectedModelId: string;
   spendingCapEnabled: boolean;
@@ -69,7 +69,8 @@ interface MeterState {
   setAuth: (userId: string, email: string) => void;
   setCardOnFile: (v: boolean, last4?: string) => void;
   setStripeCustomerId: (id: string) => void;
-  setGmailConnected: (v: boolean) => void;
+  connectService: (id: string) => void;
+  disconnectService: (id: string) => void;
   logout: () => void;
 
   addProject: (name: string) => void;
@@ -155,7 +156,7 @@ export const useMeterStore = create<MeterState>()(
       cardOnFile: false,
       cardLast4: null,
       stripeCustomerId: null,
-      gmailConnected: false,
+      connectedServices: {},
 
       selectedModelId: DEFAULT_MODEL.id,
       spendingCapEnabled: false,
@@ -172,7 +173,10 @@ export const useMeterStore = create<MeterState>()(
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
       setCardOnFile: (v, last4) => set({ cardOnFile: v, cardLast4: last4 ?? null }),
       setStripeCustomerId: (id) => set({ stripeCustomerId: id }),
-      setGmailConnected: (v) => set({ gmailConnected: v }),
+      connectService: (id) =>
+        set((s) => ({ connectedServices: { ...s.connectedServices, [id]: true } })),
+      disconnectService: (id) =>
+        set((s) => ({ connectedServices: { ...s.connectedServices, [id]: false } })),
 
       logout: () =>
         set({
@@ -182,7 +186,7 @@ export const useMeterStore = create<MeterState>()(
           cardOnFile: false,
           cardLast4: null,
           stripeCustomerId: null,
-          gmailConnected: false,
+          connectedServices: {},
           projects: initialProjects,
           activeProjectId: "meter",
           inspectorOpen: false,
@@ -369,7 +373,7 @@ export const useMeterStore = create<MeterState>()(
         cardOnFile: s.cardOnFile,
         cardLast4: s.cardLast4,
         stripeCustomerId: s.stripeCustomerId,
-        gmailConnected: s.gmailConnected,
+        connectedServices: s.connectedServices,
         selectedModelId: s.selectedModelId,
         spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,

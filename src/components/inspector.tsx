@@ -1,6 +1,7 @@
 "use client";
 
 import { useMeterStore, ChatMessage } from "@/lib/store";
+import { useDecisionsStore, Decision } from "@/lib/decisions-store";
 
 export function Inspector() {
   const {
@@ -22,7 +23,7 @@ export function Inspector() {
 
   if (!inspectorOpen) return null;
 
-  const tabs = ["usage", "purchases", "settings"] as const;
+  const tabs = ["usage", "purchases", "decisions", "settings"] as const;
 
   return (
     <>
@@ -77,6 +78,7 @@ export function Inspector() {
             />
           )}
           {inspectorTab === "purchases" && <PurchasesTab />}
+          {inspectorTab === "decisions" && <DecisionsTab />}
           {inspectorTab === "settings" && (
             <SettingsTab
               email={email}
@@ -288,6 +290,78 @@ function SettingsTab({
         <p className="font-mono text-[10px] text-muted-foreground/40 mb-2">
           Your conversation persists as one eternal session.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── DECISIONS TAB ─── */
+function DecisionRow({ decision }: { decision: Decision }) {
+  const { archiveDecision } = useDecisionsStore();
+  const isDecided = decision.status === "decided";
+
+  return (
+    <div className="group flex items-center gap-2 py-1.5 hover:bg-foreground/[0.02] transition-colors rounded-md px-1">
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          isDecided ? "bg-emerald-500" : "bg-amber-500"
+        }`}
+      />
+      <span className="flex-1 truncate font-mono text-[11px] text-foreground/80">
+        {decision.title}
+      </span>
+      <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => archiveDecision(decision.id)}
+          className="rounded px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+        >
+          archive
+        </button>
+      </div>
+      <span
+        className={`group-hover:hidden shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+          isDecided
+            ? "bg-emerald-500/10 text-emerald-500"
+            : "bg-amber-500/10 text-amber-500"
+        }`}
+      >
+        {isDecided ? "decided" : "open"}
+      </span>
+    </div>
+  );
+}
+
+function DecisionsTab() {
+  const { decisions } = useDecisionsStore();
+  const visible = decisions
+    .filter((d) => !d.archived)
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "undecided" ? -1 : 1;
+      return b.updatedAt - a.updatedAt;
+    });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+          Decisions
+        </div>
+        {visible.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <span className="font-mono text-xs text-muted-foreground/40">
+              No decisions yet
+            </span>
+            <span className="font-mono text-[10px] text-muted-foreground/30">
+              Decisions are logged as you chat
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            {visible.map((d) => (
+              <DecisionRow key={d.id} decision={d} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

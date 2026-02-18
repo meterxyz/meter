@@ -9,7 +9,8 @@ import { GmailScreen } from "@/components/gmail-screen";
 export default function Home() {
   const authenticated = useMeterStore((s) => s.authenticated);
   const cardOnFile = useMeterStore((s) => s.cardOnFile);
-  const gmailConnected = useMeterStore((s) => s.gmailConnected);
+  const connectedServices = useMeterStore((s) => s.connectedServices);
+  const gmailConnected = !!connectedServices.gmail;
 
   // Flow: Email/Passkey → Card → Gmail → Chat
   if (!authenticated) {
