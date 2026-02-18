@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        send({ type: "done" });
+        send({ type: "done", actualModel: activeModel });
         controller.close();
       },
     });

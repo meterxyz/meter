@@ -123,7 +123,7 @@ interface MeterState {
 
   addMessage: (msg: ChatMessage) => void;
   updateLastAssistantMessage: (content: string, tokensOut: number) => void;
-  finalizeResponse: (tokensIn: number, tokensOut: number, confidence: number) => void;
+  finalizeResponse: (tokensIn: number, tokensOut: number, confidence: number, actualModel?: string) => void;
   setStreaming: (v: boolean) => void;
   markSettled: (messageId: string) => void;
   settleAll: () => Promise<{ success: boolean; error?: string }>;
@@ -373,12 +373,13 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, updated) };
         }),
 
-      finalizeResponse: (tokensIn, tokensOut, confidence) => {
+      finalizeResponse: (tokensIn, tokensOut, confidence, actualModel) => {
         const balanceBefore = get().getPendingBalance();
 
         set((s) => {
           const active = ensureDaily(getActiveProject(s));
-          const pricingModelId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId;
+          const pricingModelId = actualModel
+            ?? (s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId);
           const model = getModel(pricingModelId);
           const inputCost = tokensIn * model.inputPrice;
           const totalMsgCost = inputCost + tokensOut * model.outputPrice;
