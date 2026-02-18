@@ -180,13 +180,14 @@ export async function POST(req: NextRequest) {
             error: err.error,
           });
 
-          // Classify the error
+          // Classify the error — never leak raw messages to the client
           const errorStr = JSON.stringify(err.error ?? "").toLowerCase();
           const msgStr = (err.message ?? "").toLowerCase();
+          const statusCode = err.status ?? 0;
 
           let errorCode = "unknown";
           if (
-            err.status === 429 ||
+            statusCode === 429 ||
             err.code === "rate_limit_exceeded" ||
             err.type === "rate_limit_error" ||
             /rate.?limit|too many request|throttl/i.test(msgStr) ||
@@ -194,16 +195,29 @@ export async function POST(req: NextRequest) {
           ) {
             errorCode = "rate_limit";
           } else if (
-            err.status === 402 ||
-            /credits|insufficient.?funds|payment|afford/i.test(msgStr) ||
-            /credits|insufficient.?funds|payment|afford/i.test(errorStr)
+            statusCode === 402 ||
+            /credits|insufficient.?funds|payment|afford|billing/i.test(msgStr) ||
+            /credits|insufficient.?funds|payment|afford|billing/i.test(errorStr)
           ) {
             errorCode = "insufficient_credits";
           } else if (
-            /capacity|overloaded|unavailable/i.test(msgStr) ||
-            /capacity|overloaded|unavailable/i.test(errorStr)
+            statusCode === 503 ||
+            /capacity|overloaded|unavailable|service.?unavailable/i.test(msgStr) ||
+            /capacity|overloaded|unavailable|service.?unavailable/i.test(errorStr)
           ) {
             errorCode = "capacity";
+          } else if (
+            statusCode === 401 || statusCode === 403 ||
+            /auth|forbidden|permission|invalid.?key/i.test(msgStr)
+          ) {
+            errorCode = "auth";
+          } else if (
+            statusCode === 400 ||
+            /invalid|bad.?request|malformed/i.test(msgStr)
+          ) {
+            errorCode = "bad_request";
+          } else if (statusCode >= 500) {
+            errorCode = "server_error";
           }
 
           // Extract retry/reset timing from headers or error body
@@ -227,17 +241,13 @@ export async function POST(req: NextRequest) {
             ? resolvedModel.split("/")[0].charAt(0).toUpperCase() + resolvedModel.split("/")[0].slice(1)
             : null;
 
-          // Extract the clean error message (strip status code prefix)
-          const nestedMsg = err.error?.message as string | undefined;
-          const cleanMessage = nestedMsg || err.message;
-
+          // Only send classified code + context to client — no raw messages
           send({
             type: "error",
             code: errorCode,
             model: resolvedModel,
             provider,
             retryAfter,
-            message: cleanMessage,
           });
         }
 

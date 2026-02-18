@@ -25,14 +25,12 @@ function ErrorCard({ payload }: { payload: string }) {
   let code = "unknown";
   let model = "";
   let provider = "";
-  let message = "";
   let retryAfter: string | null = null;
   try {
     const parsed = JSON.parse(payload);
     code = parsed.code ?? "unknown";
     model = parsed.model ?? "";
     provider = parsed.provider ?? "";
-    message = parsed.message ?? "";
     retryAfter = parsed.retryAfter ?? null;
   } catch { /* ignore */ }
 
@@ -58,22 +56,32 @@ function ErrorCard({ payload }: { payload: string }) {
     }
   }
 
-  // Build message based on error type
-  let headline: string;
-  let detail: string | null = null;
+  // Clean, user-facing messages only — never expose raw API errors
+  const messages: Record<string, { headline: string; detail?: string }> = {
+    rate_limit: {
+      headline: `${modelLabel} is being rate-limited by ${providerLabel}${resetLabel ? ` \u2014 ${resetLabel}` : ""}. Switch to Auto to continue the conversation.`,
+    },
+    insufficient_credits: {
+      headline: `${modelLabel} is temporarily unavailable due to usage limits. Switch to Auto or try a different model.`,
+    },
+    capacity: {
+      headline: `${modelLabel} is temporarily at capacity on ${providerLabel}. Switch to Auto or try again shortly.`,
+    },
+    auth: {
+      headline: `${modelLabel} could not be reached due to a configuration issue. Try a different model.`,
+    },
+    bad_request: {
+      headline: `${modelLabel} couldn\u2019t process this request. Try rephrasing or switching models.`,
+    },
+    server_error: {
+      headline: `${modelLabel} is experiencing issues on ${providerLabel}. Switch to Auto or try again shortly.`,
+    },
+    unknown: {
+      headline: `${modelLabel} is temporarily unavailable. Switch to Auto to continue the conversation.`,
+    },
+  };
 
-  if (code === "rate_limit") {
-    headline = `${modelLabel} is being rate-limited by ${providerLabel}${resetLabel ? ` \u2014 ${resetLabel}` : ""}. Switch to Auto to continue the conversation.`;
-  } else if (code === "insufficient_credits") {
-    headline = `${modelLabel} requires more OpenRouter credits than currently available.`;
-    detail = "Add credits at openrouter.ai/settings/credits, or switch to a cheaper model.";
-  } else if (code === "capacity") {
-    headline = `${modelLabel} is temporarily at capacity${providerLabel ? ` on ${providerLabel}` : ""}. Try again shortly or switch models.`;
-  } else {
-    headline = `${modelLabel} returned an error.`;
-    // Show the raw message for unknown errors so the user can see what happened
-    if (message) detail = message;
-  }
+  const { headline, detail } = messages[code] ?? messages.unknown;
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
@@ -411,7 +419,6 @@ export function ChatView() {
                 model: data.model,
                 provider: data.provider,
                 retryAfter: data.retryAfter,
-                message: data.message,
               });
               fullContent = `__error__${errorPayload}`;
               updateLastAssistantMessage(fullContent, 0);
