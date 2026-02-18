@@ -1,5 +1,47 @@
--- Meter: Eternal sessions schema
+-- Meter: Full database schema
 -- Run this in the Supabase SQL editor (Dashboard > SQL Editor)
+
+-- =============================================
+-- USERS & AUTH
+-- =============================================
+
+-- Users table (email-based accounts)
+create table if not exists meter_users (
+  id text primary key,
+  email text unique not null,
+  stripe_customer_id text,
+  card_last4 text,
+  card_brand text,
+  gmail_connected boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Passkey credentials (WebAuthn)
+create table if not exists passkey_credentials (
+  credential_id text primary key,
+  user_id text not null references meter_users(id) on delete cascade,
+  public_key text not null,
+  counter bigint not null default 0,
+  device_type text,
+  backed_up boolean default false,
+  transports jsonb,
+  created_at timestamptz default now()
+);
+
+-- Auth challenges (temporary, for WebAuthn ceremony)
+create table if not exists auth_challenges (
+  id text primary key,
+  email text not null,
+  challenge text not null,
+  type text not null check (type in ('register', 'login')),
+  expires_at timestamptz not null,
+  created_at timestamptz default now()
+);
+
+-- =============================================
+-- CHAT & SESSIONS
+-- =============================================
 
 -- Chat sessions (one per project thread)
 create table if not exists chat_sessions (
@@ -36,6 +78,10 @@ create table if not exists chat_messages (
   created_at timestamptz default now()
 );
 
+-- =============================================
+-- WORKSPACES
+-- =============================================
+
 -- Workspaces
 create table if not exists workspaces (
   id text primary key,
@@ -68,7 +114,44 @@ create table if not exists decisions (
   updated_at timestamptz default now()
 );
 
--- Indexes
+-- =============================================
+-- API KEYS & USAGE (v1 API)
+-- =============================================
+
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  wallet_address text unique not null,
+  created_at timestamptz default now()
+);
+
+create table if not exists api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  key_hash text unique not null,
+  key_prefix text not null,
+  name text,
+  active boolean default true,
+  created_at timestamptz default now(),
+  last_used_at timestamptz
+);
+
+create table if not exists usage_records (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id),
+  api_key_id uuid references api_keys(id),
+  model text,
+  tokens_in integer default 0,
+  tokens_out integer default 0,
+  created_at timestamptz default now()
+);
+
+-- =============================================
+-- INDEXES
+-- =============================================
+
+create index if not exists idx_meter_users_email on meter_users(email);
+create index if not exists idx_passkey_credentials_user on passkey_credentials(user_id);
+create index if not exists idx_auth_challenges_email on auth_challenges(email);
 create index if not exists idx_chat_messages_session on chat_messages(session_id);
 create index if not exists idx_chat_messages_timestamp on chat_messages(timestamp);
 create index if not exists idx_chat_sessions_user on chat_sessions(user_id);

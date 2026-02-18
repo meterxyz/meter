@@ -3,30 +3,133 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useMeterStore } from "@/lib/store";
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 
 export function LoginScreen() {
-  const { setAuth } = useMeterStore();
+  const { setAuth, setCardOnFile, setGmailConnected } = useMeterStore();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSignup = async () => {
-    if (!email.trim()) return;
+  const handleContinue = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) return;
     setLoading(true);
     setError(null);
+    setStatus(null);
 
     try {
-      // In production: /api/auth/signup with passkey registration
-      const userId = `usr_${Date.now().toString(36)}`;
-      setAuth(userId, email.trim());
+      // Step 1: Check if account exists
+      setStatus("Looking up account...");
+      const checkRes = await fetch("/api/auth/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const checkData = await checkRes.json();
+
+      if (checkData.exists && checkData.hasPasskey) {
+        // Existing user with passkey — LOGIN flow
+        await handleLogin(trimmed);
+      } else {
+        // New user or no passkey — REGISTER flow
+        await handleRegister(trimmed);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      setError(msg);
       setLoading(false);
+      setStatus(null);
+    }
+  };
+
+  const handleRegister = async (emailAddr: string) => {
+    setStatus("Setting up passkey...");
+
+    // Get registration options
+    const optRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step: "options", email: emailAddr }),
+    });
+    const optData = await optRes.json();
+    if (!optRes.ok) throw new Error(optData.error || "Failed to get options");
+
+    // Start WebAuthn registration (triggers biometric/Face ID)
+    const credential = await startRegistration({ optionsJSON: optData.options });
+
+    // Verify with server
+    setStatus("Verifying...");
+    const verifyRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        step: "verify",
+        challengeId: optData.challengeId,
+        credential,
+        userId: optData.userId,
+      }),
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok) throw new Error(verifyData.error || "Registration failed");
+
+    // Success — set auth state from server response
+    completeAuth(verifyData.user);
+  };
+
+  const handleLogin = async (emailAddr: string) => {
+    setStatus("Authenticating...");
+
+    // Get authentication options
+    const optRes = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step: "options", email: emailAddr }),
+    });
+    const optData = await optRes.json();
+    if (!optRes.ok) throw new Error(optData.error || "Failed to get options");
+
+    // Start WebAuthn authentication (triggers biometric/Face ID)
+    const credential = await startAuthentication({ optionsJSON: optData.options });
+
+    // Verify with server
+    setStatus("Verifying...");
+    const verifyRes = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        step: "verify",
+        challengeId: optData.challengeId,
+        credential,
+        userId: optData.userId,
+      }),
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok) throw new Error(verifyData.error || "Login failed");
+
+    // Success — set auth state from server response
+    completeAuth(verifyData.user);
+  };
+
+  const completeAuth = (user: {
+    id: string;
+    email: string;
+    cardOnFile: boolean;
+    cardLast4: string | null;
+    gmailConnected: boolean;
+  }) => {
+    setAuth(user.id, user.email);
+    if (user.cardOnFile) {
+      setCardOnFile(true, user.cardLast4 ?? undefined);
+    }
+    if (user.gmailConnected) {
+      setGmailConnected(true);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSignup();
+    if (e.key === "Enter") handleContinue();
   };
 
   return (
@@ -61,22 +164,33 @@ export function LoginScreen() {
             placeholder="you@startup.com"
             className="w-full h-10 rounded-lg border border-border bg-card px-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors"
             autoFocus
+            disabled={loading}
           />
 
           {error && (
             <p className="font-mono text-[11px] text-red-400">{error}</p>
           )}
 
+          {status && !error && (
+            <p className="font-mono text-[11px] text-muted-foreground/60">{status}</p>
+          )}
+
           <button
-            onClick={handleSignup}
+            onClick={handleContinue}
             disabled={loading || !email.trim()}
-            className="w-full h-10 rounded-lg bg-foreground text-background text-sm font-medium transition-colors hover:bg-foreground/90 active:bg-foreground/80 disabled:opacity-50"
+            className="w-full h-10 rounded-lg bg-foreground text-background text-sm font-medium transition-colors hover:bg-foreground/90 active:bg-foreground/80 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? "Setting up..." : "Get Started"}
+            {loading && (
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {loading ? "Authenticating..." : "Get Started"}
           </button>
 
           <p className="font-mono text-[10px] text-muted-foreground/40 leading-relaxed">
-            We&apos;ll ask for a card next. No charge until you chat.
+            Sign in with passkey. We&apos;ll ask for a card next.
           </p>
         </div>
       </div>
