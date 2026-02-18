@@ -298,12 +298,13 @@ function SettingsTab({
 
 /* ─── DECISIONS TAB ─── */
 function DecisionRow({ decision }: { decision: Decision }) {
-  const { archiveDecision } = useDecisionsStore();
+  const { archiveDecision, reopenDecision } = useDecisionsStore();
   const setPendingInput = useMeterStore((s) => s.setPendingInput);
   const [expanded, setExpanded] = useState(false);
   const isDecided = decision.status === "decided";
 
   const handleRevisit = () => {
+    if (isDecided) reopenDecision(decision.id);
     const msg = isDecided
       ? `I want to revisit the decision "${decision.title}" — we chose "${decision.choice}". Can we reconsider this?`
       : `Let's discuss the open decision "${decision.title}" and make a call.`;
