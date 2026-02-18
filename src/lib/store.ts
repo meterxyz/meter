@@ -409,10 +409,12 @@ export const useMeterStore = create<MeterState>()(
           };
 
           // Output costs are incrementally added during streaming by
-          // updateLastAssistantMessage. Reconcile any difference between
-          // the streamed token count and the authoritative final count,
-          // then add input costs (which aren't tracked during streaming).
-          const streamedOutputCost = (last?.tokensOut ?? 0) * model.outputPrice;
+          // updateLastAssistantMessage using the *selected* model's price.
+          // When the actual model differs (rerouting), reconcile against what
+          // was accumulated, not the final model's rate.
+          const selectedPricingId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId;
+          const streamingModel = getModel(selectedPricingId);
+          const streamedOutputCost = (last?.tokensOut ?? 0) * streamingModel.outputPrice;
           const finalOutputCost = tokensOut * model.outputPrice;
           const costDelta = inputCost + (finalOutputCost - streamedOutputCost);
 
