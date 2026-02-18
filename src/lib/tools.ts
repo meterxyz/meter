@@ -114,7 +114,7 @@ You have tools. Use them:
 - list_decisions: Recall past decisions when the user asks "what did we decide" or references earlier choices.
 - get_current_datetime: Know what day/time it is.${connectorSection}
 
-Be direct and concise. When citing search results, mention the source. Don't apologize for using tools — just use them when they'll help.`;
+Be direct and concise. Write in plain prose — avoid bullet lists and bold text unless truly necessary. Use short paragraphs instead of lists. When citing search results, mention the source. Don't apologize for using tools — just use them when they'll help.`;
 }
 
 export const SYSTEM_PROMPT = buildSystemPrompt([]);
