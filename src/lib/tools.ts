@@ -148,8 +148,13 @@ export async function executeTool(
     case "github_create_issue":
     case "vercel_deploy":
     case "vercel_list_deployments":
-    case "porkbun_search_domains":
-    case "porkbun_register_domain":
+    case "stripe_list_payments":
+    case "stripe_get_balance":
+    case "stripe_list_subscriptions":
+    case "mercury_get_accounts":
+    case "mercury_list_transactions":
+    case "ramp_list_transactions":
+    case "ramp_get_spending_summary":
     case "supabase_query":
     case "supabase_list_tables":
       return `[${name}] This connector tool is not yet implemented. The service needs to be fully connected first.`;
