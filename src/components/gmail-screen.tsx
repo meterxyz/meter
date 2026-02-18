@@ -5,7 +5,7 @@ import { useMeterStore } from "@/lib/store";
 import Image from "next/image";
 
 export function GmailScreen() {
-  const { email, setGmailConnected } = useMeterStore();
+  const { email, connectService } = useMeterStore();
   const [loading, setLoading] = useState(false);
 
   const handleConnect = async () => {
@@ -13,11 +13,11 @@ export function GmailScreen() {
     // TODO: Implement real Gmail OAuth flow
     // For now, simulate connection
     await new Promise((r) => setTimeout(r, 800));
-    setGmailConnected(true);
+    connectService("gmail");
   };
 
   const handleSkip = () => {
-    setGmailConnected(true);
+    connectService("gmail");
   };
 
   return (

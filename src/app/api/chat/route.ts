@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
-import { TOOL_DEFINITIONS, SYSTEM_PROMPT, executeTool } from "@/lib/tools";
+import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/tools";
 
 function getOpenRouterClient() {
   return new OpenAI({
@@ -22,14 +22,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { messages, model, userId, projectId } = await req.json();
+    const { messages, model, userId, projectId, connectedServices } = await req.json();
+    const connectedIds: string[] = Array.isArray(connectedServices) ? connectedServices : [];
     const resolvedModel = !model || model === "auto" ? "anthropic/claude-sonnet-4" : model;
     const openrouter = getOpenRouterClient();
     const encoder = new TextEncoder();
+    const tools = getToolsForConnectors(connectedIds);
+    const systemPrompt = buildSystemPrompt(connectedIds);
 
     // Build conversation with system prompt
     const conversation: Message[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       ...messages.map((m: { role: string; content: string }) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
@@ -49,7 +52,7 @@ export async function POST(req: NextRequest) {
             const response = await openrouter.chat.completions.create({
               model: resolvedModel,
               messages: conversation,
-              tools: TOOL_DEFINITIONS,
+              tools,
               stream: true,
               stream_options: { include_usage: true },
             });

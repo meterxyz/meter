@@ -6,11 +6,9 @@ import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { ActionCard } from "@/components/action-card";
-import { DecisionsBar } from "@/components/decisions-bar";
-import { DecisionsPanel } from "@/components/decisions-panel";
+import { ConnectorsBar } from "@/components/connectors-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
-import { Decision } from "@/lib/decisions-store";
 import { useSessionSync } from "@/lib/use-session-sync";
 
 function statusLabel(msg: ChatMessage) {
@@ -61,6 +59,17 @@ const TOOL_LABELS: Record<string, string> = {
   save_decision: "Saving decision",
   list_decisions: "Recalling decisions",
   get_current_datetime: "Checking date",
+  search_emails: "Searching emails",
+  read_email: "Reading email",
+  github_create_repo: "Creating repo",
+  github_list_repos: "Listing repos",
+  github_create_issue: "Creating issue",
+  vercel_deploy: "Deploying",
+  vercel_list_deployments: "Listing deployments",
+  porkbun_search_domains: "Searching domains",
+  porkbun_register_domain: "Registering domain",
+  supabase_query: "Querying database",
+  supabase_list_tables: "Listing tables",
 };
 
 function ThinkingIndicator({ toolName }: { toolName?: string | null }) {
@@ -233,6 +242,9 @@ export function ChatView() {
           model: selectedModelId,
           userId: userId || undefined,
           projectId: activeProjectId,
+          connectedServices: Object.keys(connectedServices).filter(
+            (k) => connectedServices[k]
+          ),
         }),
       });
 
@@ -297,19 +309,7 @@ export function ChatView() {
     }
   };
 
-  // Revisit a decided item — sends context to the AI
-  const handleRevisit = useCallback((d: Decision) => {
-    const input = inputRef.current;
-    if (!input) return;
-    let msg = `I want to revisit the decision about "${d.title}".`;
-    if (d.choice) msg += `\nThe original choice was "${d.choice}"`;
-    if (d.reasoning) msg += ` because: ${d.reasoning}`;
-    msg += `\nWhat should we reconsider?`;
-    input.value = msg;
-    input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 120) + "px";
-    input.focus();
-  }, []);
+  const connectedServices = useMeterStore((s) => s.connectedServices);
 
   const lastMsg = messages[messages.length - 1];
   const showThinking = isStreaming && (activeTool || (lastMsg?.role === "assistant" && lastMsg.content === ""));
@@ -416,11 +416,8 @@ export function ChatView() {
           <div className="mx-auto max-w-2xl">
             {/* Unified box */}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
-              {/* Decisions bar — top section */}
-              <DecisionsBar />
-
-              {/* Decisions panel — expands inside the card, pushes content up */}
-              <DecisionsPanel onRevisit={handleRevisit} />
+              {/* Connectors bar — top section */}
+              <ConnectorsBar />
 
               {/* Model picker panel (expands inline) */}
               {modelPickerOpen && (

@@ -1,15 +1,19 @@
 import { getSupabaseServer } from "@/lib/supabase";
+import { CONNECTORS, ConnectorToolDef } from "@/lib/connectors";
 
 /* ─── Tool schemas (OpenAI function-calling format) ─────────────── */
 
-export const TOOL_DEFINITIONS: {
+export type ToolDef = {
   type: "function";
   function: {
     name: string;
     description: string;
     parameters: Record<string, unknown>;
   };
-}[] = [
+};
+
+/** Built-in tools — always available regardless of connectors */
+export const BUILTIN_TOOLS: ToolDef[] = [
   {
     type: "function",
     function: {
@@ -67,17 +71,53 @@ export const TOOL_DEFINITIONS: {
   },
 ];
 
+/** For backwards compat — all built-in tools */
+export const TOOL_DEFINITIONS = BUILTIN_TOOLS;
+
+/**
+ * Build the full tool list: built-in tools + tools from connected services.
+ */
+export function getToolsForConnectors(connectedIds: string[]): ToolDef[] {
+  const connectorTools: ToolDef[] = [];
+  for (const id of connectedIds) {
+    const connector = CONNECTORS.find((c) => c.id === id);
+    if (connector) {
+      connectorTools.push(...(connector.tools as ToolDef[]));
+    }
+  }
+  return [...BUILTIN_TOOLS, ...connectorTools];
+}
+
 /* ─── System prompt ─────────────────────────────────────────────── */
 
-export const SYSTEM_PROMPT = `You are Meter — an AI assistant that can search the web, track decisions, and help users build things.
+export function buildSystemPrompt(connectedIds: string[]): string {
+  const connectorLines = connectedIds
+    .map((id) => {
+      const c = CONNECTORS.find((conn) => conn.id === id);
+      if (!c) return null;
+      return c.tools
+        .map((t) => `- ${t.function.name}: ${t.function.description}`)
+        .join("\n");
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  const connectorSection = connectorLines
+    ? `\n\nConnected services:\n${connectorLines}`
+    : "";
+
+  return `You are Meter — an AI assistant that can search the web, track decisions, and help users build things.
 
 You have tools. Use them:
 - web_search: Search the web for anything current — news, docs, prices, APIs, etc. Use this proactively when questions touch on recent events or data you're unsure about.
 - save_decision: Log important decisions when the user makes a choice or asks you to recommend something. This helps them track what was decided and why.
 - list_decisions: Recall past decisions when the user asks "what did we decide" or references earlier choices.
-- get_current_datetime: Know what day/time it is.
+- get_current_datetime: Know what day/time it is.${connectorSection}
 
 Be direct and concise. When citing search results, mention the source. Don't apologize for using tools — just use them when they'll help.`;
+}
+
+export const SYSTEM_PROMPT = buildSystemPrompt([]);
 
 /* ─── Tool execution ────────────────────────────────────────────── */
 
@@ -100,6 +140,19 @@ export async function executeTool(
       return saveDecision(args, ctx);
     case "list_decisions":
       return listDecisions(ctx);
+    // Connector tools — placeholder implementations
+    case "search_emails":
+    case "read_email":
+    case "github_create_repo":
+    case "github_list_repos":
+    case "github_create_issue":
+    case "vercel_deploy":
+    case "vercel_list_deployments":
+    case "porkbun_search_domains":
+    case "porkbun_register_domain":
+    case "supabase_query":
+    case "supabase_list_tables":
+      return `[${name}] This connector tool is not yet implemented. The service needs to be fully connected first.`;
     default:
       return `Unknown tool: ${name}`;
   }
