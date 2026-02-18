@@ -53,7 +53,11 @@ export async function POST(req: NextRequest) {
       cardBrand: brand,
     });
   } catch (err) {
-    console.error("Confirm billing error:", err);
-    return NextResponse.json({ error: "Failed to confirm card" }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Confirm billing error:", message);
+    return NextResponse.json(
+      { error: message.includes("relation") ? "Database tables not set up. Visit /api/setup-db first." : message },
+      { status: 500 }
+    );
   }
 }

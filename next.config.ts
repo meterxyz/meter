@@ -2,14 +2,14 @@ import type { NextConfig } from "next";
 
 const csp = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline';
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https:;
   font-src 'self';
   object-src 'none';
   base-uri 'self';
   form-action 'self';
-  connect-src 'self' https://openrouter.ai https://js.stripe.com https://api.stripe.com;
+  connect-src 'self' https://openrouter.ai https://js.stripe.com https://api.stripe.com https://*.supabase.co;
   frame-src https://js.stripe.com;
   worker-src 'self' blob:;
   manifest-src 'self';
