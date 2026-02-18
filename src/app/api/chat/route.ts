@@ -140,7 +140,18 @@ export async function POST(req: NextRequest) {
 
               const result = await executeTool(tc.name, args, { userId, projectId });
 
-              send({ type: "tool_result", name: tc.name });
+              // Send tool result with args for client-side state sync
+              const toolResultEvent: Record<string, unknown> = { type: "tool_result", name: tc.name };
+              if (tc.name === "save_decision") {
+                toolResultEvent.decision = {
+                  title: args.title,
+                  status: "decided",
+                  choice: args.choice,
+                  alternatives: args.alternatives || [],
+                  reasoning: args.reasoning || null,
+                };
+              }
+              send(toolResultEvent);
 
               // Add tool result to conversation
               conversation.push({

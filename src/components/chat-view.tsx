@@ -9,7 +9,9 @@ import { ActionCard } from "@/components/action-card";
 import { ConnectorsBar } from "@/components/connectors-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 import { useSessionSync } from "@/lib/use-session-sync";
+import { useDecisionsStore } from "@/lib/decisions-store";
 import ReactMarkdown from "react-markdown";
 
 function statusLabel(msg: ChatMessage) {
@@ -128,6 +130,12 @@ export function ChatView() {
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const userId = useMeterStore((s) => s.userId);
+  const wsCompanies = useWorkspaceStore((s) => s.companies);
+  const wsActiveCompanyId = useWorkspaceStore((s) => s.activeCompanyId);
+  const activeCompanyName = useMemo(
+    () => wsCompanies.find((c) => c.id === wsActiveCompanyId)?.name ?? activeProject?.name ?? "Meter",
+    [wsCompanies, wsActiveCompanyId, activeProject]
+  );
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -298,7 +306,16 @@ export function ChatView() {
             } else if (data.type === "tool_call") {
               setActiveTool(data.name as string);
             } else if (data.type === "tool_result") {
-              // Tool finished — will go back to thinking/streaming
+              if (data.name === "save_decision" && data.decision) {
+                const d = data.decision as { title: string; status: string; choice: string; alternatives?: string[]; reasoning?: string };
+                useDecisionsStore.getState().addDecision({
+                  title: d.title,
+                  status: d.status === "decided" ? "decided" : "undecided",
+                  choice: d.choice,
+                  alternatives: d.alternatives,
+                  reasoning: d.reasoning ?? undefined,
+                });
+              }
             } else if (data.type === "usage") {
               finalUsage = {
                 tokensIn: data.tokensIn,
@@ -354,7 +371,7 @@ export function ChatView() {
               onClick={() => setShowHeaderMeterDropdown((v) => !v)}
               className="rounded-md border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
             >
-              {activeProject?.name} · ${headerMeterStats.total.toFixed(2)} total
+              {activeCompanyName} · ${headerMeterStats.total.toFixed(2)} total
             </button>
             {showHeaderMeterDropdown && (
               <>
