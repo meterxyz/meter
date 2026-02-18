@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useWorkspaceStore } from "@/lib/workspace-store";
+import { useMeterStore } from "@/lib/store";
 import { CompanySwitcher } from "./company-switcher";
 import { ProjectSwitcher } from "./project-switcher";
 
@@ -11,6 +12,7 @@ export function WorkspaceBar() {
   const projects = useWorkspaceStore((s) => s.projects);
   const activeCompanyId = useWorkspaceStore((s) => s.activeCompanyId);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  const cardLast4 = useMeterStore((s) => s.cardLast4);
 
   const activeCompany = useMemo(
     () => companies.find((c) => c.id === activeCompanyId) ?? null,
@@ -23,35 +25,51 @@ export function WorkspaceBar() {
 
   return (
     <div className="mt-2 flex items-center gap-3 font-mono text-[10px] text-muted-foreground/50">
-      {/* Workspace (building icon) */}
-      <div className="flex items-center gap-1">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/40">
-          <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
-          <path d="M9 22v-4h6v4" />
-          <path d="M8 6h.01" />
-          <path d="M16 6h.01" />
-          <path d="M8 10h.01" />
-          <path d="M16 10h.01" />
-          <path d="M8 14h.01" />
-          <path d="M16 14h.01" />
-        </svg>
-        <CompanySwitcher activeCompany={activeCompany} />
+      {/* Left: Workspace + Track */}
+      <div className="flex items-center gap-3">
+        {/* Workspace (building icon) */}
+        <div className="flex items-center gap-1">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/40">
+            <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+            <path d="M9 22v-4h6v4" />
+            <path d="M8 6h.01" />
+            <path d="M16 6h.01" />
+            <path d="M8 10h.01" />
+            <path d="M16 10h.01" />
+            <path d="M8 14h.01" />
+            <path d="M16 14h.01" />
+          </svg>
+          <CompanySwitcher activeCompany={activeCompany} />
+        </div>
+
+        {activeCompany && (
+          <>
+            <span className="text-muted-foreground/20">/</span>
+            {/* Track (git-branch icon) */}
+            <div className="flex items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/40">
+                <line x1="6" y1="3" x2="6" y2="15" />
+                <circle cx="18" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M18 9a9 9 0 0 1-9 9" />
+              </svg>
+              <ProjectSwitcher activeProject={activeProject} companyId={activeCompany.id} />
+            </div>
+          </>
+        )}
       </div>
 
-      {activeCompany && (
-        <>
-          <span className="text-muted-foreground/20">/</span>
-          {/* Track (git-branch icon) */}
-          <div className="flex items-center gap-1">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/40">
-              <line x1="6" y1="3" x2="6" y2="15" />
-              <circle cx="18" cy="6" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <path d="M18 9a9 9 0 0 1-9 9" />
-            </svg>
-            <ProjectSwitcher activeProject={activeProject} companyId={activeCompany.id} />
-          </div>
-        </>
+      {/* Right: Card last 4 */}
+      {cardLast4 && (
+        <div className="ml-auto flex items-center gap-1.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/40">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+          <span className="text-muted-foreground/40">
+            •••• {cardLast4}
+          </span>
+        </div>
       )}
     </div>
   );

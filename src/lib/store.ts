@@ -50,6 +50,7 @@ interface MeterState {
   email: string | null;
   authenticated: boolean;
   cardOnFile: boolean;
+  cardLast4: string | null;
 
   selectedModelId: string;
   spendingCapEnabled: boolean;
@@ -64,7 +65,7 @@ interface MeterState {
   inspectorTab: string;
 
   setAuth: (userId: string, email: string) => void;
-  setCardOnFile: (v: boolean) => void;
+  setCardOnFile: (v: boolean, last4?: string) => void;
   logout: () => void;
 
   addProject: (name: string) => void;
@@ -148,6 +149,7 @@ export const useMeterStore = create<MeterState>()(
       email: null,
       authenticated: false,
       cardOnFile: false,
+      cardLast4: null,
 
       selectedModelId: DEFAULT_MODEL.id,
       spendingCapEnabled: false,
@@ -162,7 +164,7 @@ export const useMeterStore = create<MeterState>()(
       inspectorTab: "usage",
 
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
-      setCardOnFile: (v) => set({ cardOnFile: v }),
+      setCardOnFile: (v, last4) => set({ cardOnFile: v, cardLast4: last4 ?? null }),
 
       logout: () =>
         set({
@@ -170,6 +172,7 @@ export const useMeterStore = create<MeterState>()(
           email: null,
           authenticated: false,
           cardOnFile: false,
+          cardLast4: null,
           projects: initialProjects,
           activeProjectId: "meter",
           inspectorOpen: false,
@@ -354,6 +357,7 @@ export const useMeterStore = create<MeterState>()(
         email: s.email,
         authenticated: s.authenticated,
         cardOnFile: s.cardOnFile,
+        cardLast4: s.cardLast4,
         selectedModelId: s.selectedModelId,
         spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,
