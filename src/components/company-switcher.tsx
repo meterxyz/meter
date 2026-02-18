@@ -35,6 +35,7 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
   }, [open]);
 
   const [switchingName, setSwitchingName] = useState<string | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
 
   const switchToChatThread = (name: string) => {
     const threadId = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -42,13 +43,32 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
     if (!chatProjects.some((p) => p.id === threadId)) {
       addProject(name);
     }
-    // Show splash and switch
+    // Show splash with animated log lines
     setSwitchingName(name);
+    setLogLines([]);
     setActiveProjectChat(threadId);
-    setTimeout(() => setSwitchingName(null), 700);
+
+    const lines = [
+      `loading workspace "${name}"...`,
+      "resolving environment variables",
+      "connecting to session store",
+      "hydrating chat history",
+      "ready",
+    ];
+    lines.forEach((line, i) => {
+      setTimeout(() => setLogLines((prev) => [...prev, line]), 120 * (i + 1));
+    });
+    setTimeout(() => {
+      setSwitchingName(null);
+      setLogLines([]);
+    }, 120 * lines.length + 500);
   };
 
   const handleSelect = (id: string) => {
+    if (id === activeCompany?.id) {
+      setOpen(false);
+      return;
+    }
     const company = companies.find((c) => c.id === id);
     setActiveCompany(id);
     setOpen(false);
@@ -69,9 +89,19 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
     <>
     {switchingName && (
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 backdrop-blur-sm">
-        <div className="rounded-2xl border border-border bg-card px-8 py-6 text-center shadow-xl">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">Switching workspace</p>
-          <p className="mt-2 text-xl text-foreground">{switchingName}</p>
+        <div className="flex flex-col items-center gap-4">
+          <div className="rounded-2xl border border-border bg-card px-8 py-6 text-center shadow-xl">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">Switching workspace</p>
+            <p className="mt-2 text-xl text-foreground">{switchingName}</p>
+          </div>
+          <div className="flex flex-col items-start gap-0.5 font-mono text-[10px] text-muted-foreground/50">
+            {logLines.map((line, i) => (
+              <span key={i} className="animate-[fadeIn_0.15s_ease-out]">
+                <span className="text-muted-foreground/30 mr-1.5">&gt;</span>
+                {line}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     )}
