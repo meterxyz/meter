@@ -5,6 +5,7 @@ import { useWorkspaceStore } from "@/lib/workspace-store";
 import { useMeterStore } from "@/lib/store";
 import { CompanySwitcher } from "./company-switcher";
 import { ProjectSwitcher } from "./project-switcher";
+import { CardSwitcher } from "./card-switcher";
 
 export function WorkspaceBar() {
   // Select primitives + stable arrays — avoids new references on every render
@@ -59,18 +60,8 @@ export function WorkspaceBar() {
         )}
       </div>
 
-      {/* Right: Card last 4 */}
-      {cardLast4 && (
-        <div className="ml-auto flex items-center gap-1.5">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/40">
-            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-            <line x1="1" y1="10" x2="23" y2="10" />
-          </svg>
-          <span className="text-muted-foreground/40">
-            •••• {cardLast4}
-          </span>
-        </div>
-      )}
+      {/* Right: Card switcher */}
+      <CardSwitcher cardLast4={cardLast4} />
     </div>
   );
 }
