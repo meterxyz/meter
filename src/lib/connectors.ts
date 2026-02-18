@@ -159,42 +159,128 @@ export const CONNECTORS: ConnectorDef[] = [
     ],
   },
   {
-    id: "porkbun",
-    name: "Porkbun",
+    id: "stripe",
+    name: "Stripe",
     iconPath:
-      "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z",
+      "M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.918 3.757 7.11c0 4.46 2.72 5.876 5.664 6.957 1.882.69 2.532 1.187 2.532 1.97 0 .937-.793 1.467-2.212 1.467-1.901 0-4.847-.876-6.838-2.032l-.89 5.572C3.531 22.062 6.283 23 9.59 23c2.605 0 4.735-.636 6.234-1.855 1.649-1.339 2.419-3.225 2.419-5.548.007-4.579-2.755-5.939-5.267-6.947z",
     tools: [
       {
         type: "function",
         function: {
-          name: "porkbun_search_domains",
-          description: "Search for available domain names.",
+          name: "stripe_list_payments",
+          description: "List recent payments and charges from Stripe.",
           parameters: {
             type: "object",
             properties: {
-              query: {
+              limit: {
+                type: "number",
+                description: "Max results to return (default 10)",
+              },
+              status: {
                 type: "string",
-                description: "Domain name to search for",
+                description: "Filter by status: succeeded, pending, failed",
               },
             },
-            required: ["query"],
           },
         },
       },
       {
         type: "function",
         function: {
-          name: "porkbun_register_domain",
-          description: "Register a domain name through Porkbun.",
+          name: "stripe_get_balance",
+          description: "Get current Stripe account balance and pending amounts.",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "stripe_list_subscriptions",
+          description: "List active subscriptions and their billing details.",
           parameters: {
             type: "object",
             properties: {
-              domain: {
+              status: {
                 type: "string",
-                description: "Full domain name to register (e.g. example.com)",
+                description: "Filter by status: active, canceled, past_due, all",
               },
             },
-            required: ["domain"],
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: "mercury",
+    name: "Mercury",
+    iconPath:
+      "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z",
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "mercury_get_accounts",
+          description: "List Mercury bank accounts with balances.",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "mercury_list_transactions",
+          description: "List recent transactions from Mercury bank account.",
+          parameters: {
+            type: "object",
+            properties: {
+              limit: {
+                type: "number",
+                description: "Max results to return (default 10)",
+              },
+              account_id: {
+                type: "string",
+                description: "Mercury account ID to query",
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: "ramp",
+    name: "Ramp",
+    iconPath:
+      "M3 3h18v18H3V3zm2 2v14h14V5H5zm2 4h10v2H7V9zm0 4h7v2H7v-2z",
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "ramp_list_transactions",
+          description: "List recent Ramp card transactions and expenses.",
+          parameters: {
+            type: "object",
+            properties: {
+              limit: {
+                type: "number",
+                description: "Max results to return (default 10)",
+              },
+            },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "ramp_get_spending_summary",
+          description: "Get spending summary and category breakdown from Ramp.",
+          parameters: {
+            type: "object",
+            properties: {
+              period: {
+                type: "string",
+                description: "Time period: this_month, last_month, this_quarter",
+              },
+            },
           },
         },
       },
