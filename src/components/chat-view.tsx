@@ -159,17 +159,6 @@ export function ChatView() {
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
 
-  // Consume pendingInput from store (e.g. decision revisit)
-  useEffect(() => {
-    if (pendingInput && inputRef.current) {
-      inputRef.current.value = pendingInput;
-      inputRef.current.style.height = "auto";
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px";
-      inputRef.current.focus();
-      setPendingInput(null);
-    }
-  }, [pendingInput, setPendingInput]);
-
   // Close model picker on click outside (replaces fixed overlay)
   useEffect(() => {
     if (!modelPickerOpen) return;
@@ -368,6 +357,15 @@ export function ChatView() {
       handleSend();
     }
   };
+
+  // Consume pendingInput from store (e.g. decision revisit) — send directly
+  useEffect(() => {
+    if (pendingInput && inputRef.current && !isStreaming) {
+      inputRef.current.value = pendingInput;
+      setPendingInput(null);
+      handleSend();
+    }
+  }, [pendingInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const connectedServices = useMeterStore((s) => s.connectedServices);
 
