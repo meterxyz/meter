@@ -364,6 +364,7 @@ export function ChatView() {
       const decoder = new TextDecoder();
       let fullContent = "";
       let finalUsage: { tokensIn: number; tokensOut: number; confidence: number } | null = null;
+      let actualModelUsed: string | null = null;
       let buffer = "";
 
       while (true) {
@@ -409,6 +410,8 @@ export function ChatView() {
               });
               fullContent = `__error__${errorPayload}`;
               updateLastAssistantMessage(fullContent, 0);
+            } else if (data.type === "done") {
+              if (data.actualModel) actualModelUsed = data.actualModel as string;
             } else if (data.type === "usage") {
               finalUsage = {
                 tokensIn: data.tokensIn,
@@ -422,7 +425,7 @@ export function ChatView() {
         }
       }
 
-      if (finalUsage) finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence);
+      if (finalUsage) finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence, actualModelUsed ?? undefined);
     } catch {
       // keep silent for now
     } finally {
