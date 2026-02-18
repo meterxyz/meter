@@ -154,10 +154,10 @@ export function ChatView() {
   const messages = activeProject?.messages ?? [];
   const isStreaming = activeProject?.isStreaming ?? false;
   const todayCost = activeProject?.todayCost ?? 0;
-  const todayTokens = (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const userId = useMeterStore((s) => s.userId);
+  const chatBlocked = useMeterStore((s) => s.chatBlocked);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -201,11 +201,6 @@ export function ChatView() {
     setInspectorTab("usage");
   }, [setInspectorOpen, setInspectorTab]);
 
-  const openUsageInspector = () => {
-    setInspectorOpen(true);
-    setInspectorTab("usage");
-  };
-
   const handleProjectSwitch = (projectId: string) => {
     if (projectId === activeProjectId) {
       setShowProjectDropdown(false);
@@ -242,7 +237,7 @@ export function ChatView() {
 
   const handleSend = async () => {
     const input = inputRef.current;
-    if (!input || !input.value.trim() || isStreaming) return;
+    if (!input || !input.value.trim() || isStreaming || chatBlocked) return;
 
     if (spendingCapEnabled && todayCost >= spendingCap) return;
 
@@ -490,6 +485,16 @@ export function ChatView() {
                   </>
                 )}
 
+                {/* Chat blocked banner */}
+                {chatBlocked && (
+                  <div className="flex items-center gap-2 border-t border-red-500/20 bg-red-500/5 px-3 py-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                    <span className="font-mono text-[11px] text-red-400">
+                      Chat paused — please update your payment method or settle your balance to continue.
+                    </span>
+                  </div>
+                )}
+
                 {/* Composer — middle section */}
                 <div className="flex items-end gap-2 border-t border-border/50 p-2">
                   <ModelPickerTrigger
@@ -499,9 +504,10 @@ export function ChatView() {
                 <textarea
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
-                  placeholder="Say something..."
+                  placeholder={chatBlocked ? "Settle outstanding balance to continue..." : "Say something..."}
                   rows={1}
-                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  disabled={chatBlocked}
+                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-40"
                   style={{ maxHeight: "120px" }}
                   onInput={(e) => {
                     const t = e.currentTarget;
@@ -509,10 +515,10 @@ export function ChatView() {
                     t.style.height = Math.min(t.scrollHeight, 120) + "px";
                   }}
                 />
-                <MeterPill onClick={openUsageInspector} value={todayCost} tokens={todayTokens} />
+                <MeterPill value={todayCost} />
                 <button
                   onClick={handleSend}
-                  disabled={isStreaming}
+                  disabled={isStreaming || chatBlocked}
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

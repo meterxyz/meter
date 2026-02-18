@@ -66,6 +66,8 @@ interface MeterState {
   pendingCharges: { id: string; title: string; cost: number; type: "usage" | "card"; paidAt?: number }[];
   autoSettleThreshold: number;
   isSettling: boolean;
+  settlementError: string | null;
+  chatBlocked: boolean;
 
   pendingInput: string | null;
 
@@ -90,9 +92,10 @@ interface MeterState {
   finalizeResponse: (tokensIn: number, tokensOut: number, confidence: number) => void;
   setStreaming: (v: boolean) => void;
   markSettled: (messageId: string) => void;
-  settleAll: () => Promise<void>;
+  settleAll: () => Promise<{ success: boolean; error?: string }>;
   getPendingBalance: () => number;
   getUnsettledMessages: () => ChatMessage[];
+  clearSettlementError: () => void;
 
   approveCard: (messageId: string, cardId: string) => void;
   rejectCard: (messageId: string, cardId: string) => void;
@@ -186,6 +189,8 @@ export const useMeterStore = create<MeterState>()(
       pendingCharges: [],
       autoSettleThreshold: 10,
       isSettling: false,
+      settlementError: null,
+      chatBlocked: false,
 
       pendingInput: null,
 
@@ -266,6 +271,8 @@ export const useMeterStore = create<MeterState>()(
           inspectorOpen: false,
           pendingCharges: [],
           isSettling: false,
+          settlementError: null,
+          chatBlocked: false,
         }),
 
       addProject: (name) =>
@@ -417,8 +424,8 @@ export const useMeterStore = create<MeterState>()(
 
       settleAll: async () => {
         const s = get();
-        if (s.isSettling) return;
-        set({ isSettling: true });
+        if (s.isSettling) return { success: false, error: "Already settling" };
+        set({ isSettling: true, settlementError: null });
 
         const unsettledMsgs = s.projects
           .flatMap((p) => p.messages)
@@ -429,7 +436,7 @@ export const useMeterStore = create<MeterState>()(
 
         if (amount <= 0) {
           set({ isSettling: false });
-          return;
+          return { success: false, error: "No balance to settle" };
         }
 
         try {
@@ -445,7 +452,13 @@ export const useMeterStore = create<MeterState>()(
             }),
           });
 
-          if (!res.ok) throw new Error("Settlement failed");
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: "Settlement failed" }));
+            const errorMsg = body.error ?? "Settlement failed";
+            set({ isSettling: false, settlementError: errorMsg, chatBlocked: true });
+            return { success: false, error: errorMsg };
+          }
+
           const data = await res.json();
           const batchTxHash = data.txHash as string | undefined;
 
@@ -463,10 +476,13 @@ export const useMeterStore = create<MeterState>()(
                   : m
               ),
             }));
-            return { projects, pendingCharges: [], isSettling: false };
+            return { projects, pendingCharges: [], isSettling: false, settlementError: null, chatBlocked: false };
           });
-        } catch {
-          set({ isSettling: false });
+          return { success: true };
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : "Settlement failed";
+          set({ isSettling: false, settlementError: errorMsg, chatBlocked: true });
+          return { success: false, error: errorMsg };
         }
       },
 
@@ -523,6 +539,8 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, updated) };
         }),
 
+      clearSettlementError: () => set({ settlementError: null }),
+
       setPendingInput: (v) => set({ pendingInput: v }),
 
       toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
@@ -539,6 +557,8 @@ export const useMeterStore = create<MeterState>()(
           projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false })),
           pendingCharges: [],
           isSettling: false,
+          settlementError: null,
+          chatBlocked: false,
         })),
     }),
     {

@@ -14,6 +14,8 @@ export function SettlePill() {
   const settleAll = useMeterStore((s) => s.settleAll);
   const cardLast4 = useMeterStore((s) => s.cardLast4);
   const cardBrand = useMeterStore((s) => s.cardBrand);
+  const settlementError = useMeterStore((s) => s.settlementError);
+  const clearSettlementError = useMeterStore((s) => s.clearSettlementError);
 
   const pendingBalance = useMemo(() => {
     const msgCost = projects
@@ -67,12 +69,14 @@ export function SettlePill() {
   }, [projects, pendingCharges]);
 
   const handleSettle = async () => {
-    await settleAll();
-    setSettled(true);
-    setTimeout(() => {
-      setSettled(false);
-      setOpen(false);
-    }, 1200);
+    const result = await settleAll();
+    if (result.success) {
+      setSettled(true);
+      setTimeout(() => {
+        setSettled(false);
+        setOpen(false);
+      }, 1200);
+    }
   };
 
   useEffect(() => {
@@ -86,44 +90,48 @@ export function SettlePill() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const handleOpen = () => {
+    if (settlementError) clearSettlementError();
+    setOpen((v) => !v);
+  };
+
   const brandLabel = cardBrand
     ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1)
     : "Card";
 
+  const hasError = !!settlementError;
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleOpen}
         className={`flex h-8 items-center rounded-lg border transition-colors font-mono text-[11px] ${
           settled
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-            : pendingBalance > 0
-              ? "border-border hover:border-foreground/20"
-              : "border-border text-muted-foreground"
+            : hasError
+              ? "border-red-500/30 bg-red-500/10 text-red-400"
+              : pendingBalance > 0
+                ? "border-border hover:border-foreground/20"
+                : "border-border text-muted-foreground"
         }`}
       >
-        {/* Left: pending amount */}
         <span className="px-2.5 tabular-nums text-foreground">
           ${pendingBalance.toFixed(2)}
         </span>
-        {/* Divider */}
         <span className="h-4 w-px bg-border" />
-        {/* Right: settle label */}
         <span className="px-2.5 text-muted-foreground hover:text-foreground transition-colors">
-          {settled ? "Settled" : isSettling ? "Settling..." : "Settle"}
+          {settled ? "Settled" : hasError ? "Failed" : isSettling ? "Settling..." : "Settle"}
         </span>
       </button>
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-[340px] rounded-xl border border-border bg-card shadow-xl">
-          {/* Header */}
           <div className="border-b border-border px-4 py-3">
             <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
               Pending Charges
             </div>
           </div>
 
-          {/* Line items */}
           <div className="max-h-[280px] overflow-y-auto">
             {lineItems.length === 0 ? (
               <div className="flex items-center justify-center py-8">
@@ -159,7 +167,6 @@ export function SettlePill() {
             )}
           </div>
 
-          {/* Footer: total + pay button */}
           <div className="border-t border-border px-4 py-3 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[11px] text-muted-foreground">Total</span>
@@ -167,6 +174,15 @@ export function SettlePill() {
                 ${pendingBalance.toFixed(2)}
               </span>
             </div>
+
+            {settlementError && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
+                <span className="font-mono text-[10px] text-red-400">{settlementError}</span>
+                <p className="mt-1 font-mono text-[9px] text-red-400/60">
+                  Please update your card or try again.
+                </p>
+              </div>
+            )}
 
             <button
               onClick={handleSettle}
