@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useMeterStore } from "@/lib/store";
-import { shortModelName } from "@/lib/models";
 
 export function SettlePill() {
   const [open, setOpen] = useState(false);
@@ -26,25 +25,45 @@ export function SettlePill() {
   }, [projects, pendingCharges]);
 
   const lineItems = useMemo(() => {
-    const msgItems = projects.flatMap((p) =>
-      p.messages
-        .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled)
-        .map((m) => ({
-          id: m.id,
-          title: m.model ? shortModelName(m.model) : "AI Usage",
-          cost: m.cost ?? 0,
-          type: "usage" as const,
-          timestamp: m.timestamp,
-        }))
+    const unsettledMsgs = projects.flatMap((p) =>
+      p.messages.filter(
+        (m) => m.role === "assistant" && m.cost !== undefined && !m.settled
+      )
     );
-    const cardItems = pendingCharges.map((c) => ({
-      id: c.id,
-      title: c.title,
-      cost: c.cost,
-      type: "card" as const,
-      timestamp: Date.now(),
-    }));
-    return [...msgItems, ...cardItems].sort((a, b) => b.timestamp - a.timestamp);
+    const totalMsgCost = unsettledMsgs.reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const msgCount = unsettledMsgs.length;
+
+    const items: {
+      id: string;
+      title: string;
+      subtitle: string;
+      cost: number;
+      type: "usage" | "card";
+      paidAt?: number;
+    }[] = [];
+
+    if (msgCount > 0) {
+      items.push({
+        id: "ai-usage-grouped",
+        title: "Metered AI Usage",
+        subtitle: `${msgCount} message${msgCount !== 1 ? "s" : ""}`,
+        cost: totalMsgCost,
+        type: "usage",
+      });
+    }
+
+    for (const c of pendingCharges) {
+      items.push({
+        id: c.id,
+        title: c.title,
+        subtitle: "",
+        cost: c.cost,
+        type: "card",
+        paidAt: c.paidAt,
+      });
+    }
+
+    return items;
   }, [projects, pendingCharges]);
 
   const handleSettle = async () => {
@@ -115,25 +134,25 @@ export function SettlePill() {
             ) : (
               <div className="divide-y divide-border/50">
                 {lineItems.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between px-4 py-2.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                          item.type === "card" ? "bg-blue-400" : "bg-amber-400"
-                        }`}
-                      />
+                  <div key={item.id} className="px-4 py-2.5">
+                    <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <span className="block truncate font-mono text-[11px] text-foreground/80">
                           {item.title}
                         </span>
                         <span className="font-mono text-[9px] text-muted-foreground/40">
-                          {item.type === "card" ? "Card purchase" : "AI usage"}
+                          {item.subtitle}
                         </span>
                       </div>
+                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground">
+                        ${item.cost.toFixed(item.cost < 0.01 ? 4 : 2)}
+                      </span>
                     </div>
-                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-foreground">
-                      ${item.cost.toFixed(item.cost < 0.01 ? 4 : 2)}
-                    </span>
+                    {item.type === "card" && (
+                      <div className="mt-1 font-mono text-[9px] text-muted-foreground/50">
+                        Paid{item.paidAt ? ` on ${new Date(item.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""} with Virtual Card{cardLast4 ? ` ····${cardLast4}` : ""}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

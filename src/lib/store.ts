@@ -63,7 +63,7 @@ interface MeterState {
   projects: ProjectThread[];
   activeProjectId: string;
 
-  pendingCharges: { id: string; title: string; cost: number; type: "usage" | "card" }[];
+  pendingCharges: { id: string; title: string; cost: number; type: "usage" | "card"; paidAt?: number }[];
   autoSettleThreshold: number;
   isSettling: boolean;
 
@@ -318,6 +318,8 @@ export const useMeterStore = create<MeterState>()(
         }),
 
       finalizeResponse: (tokensIn, tokensOut, confidence) => {
+        const balanceBefore = get().getPendingBalance();
+
         set((s) => {
           const active = ensureDaily(getActiveProject(s));
           const pricingModelId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId;
@@ -369,8 +371,10 @@ export const useMeterStore = create<MeterState>()(
 
           return { projects: replaceActiveProject(s, updated) };
         });
+
         const afterState = get();
-        if (afterState.getPendingBalance() >= afterState.autoSettleThreshold) {
+        const threshold = afterState.autoSettleThreshold;
+        if (balanceBefore < threshold && afterState.getPendingBalance() >= threshold) {
           afterState.settleAll();
         }
       },
@@ -467,6 +471,8 @@ export const useMeterStore = create<MeterState>()(
       },
 
       approveCard: (messageId, cardId) => {
+        const balanceBefore = get().getPendingBalance();
+
         set((s) => {
           const active = getActiveProject(s);
           const updated = {
@@ -482,12 +488,14 @@ export const useMeterStore = create<MeterState>()(
           const card = active.messages.find((m) => m.id === messageId)?.cards?.find((c) => c.id === cardId);
           const newCharge =
             card && card.cost
-              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost, type: "card" as const }]
+              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost, type: "card" as const, paidAt: Date.now() }]
               : s.pendingCharges;
           return { projects: replaceActiveProject(s, updated), pendingCharges: newCharge };
         });
+
         const afterState = get();
-        if (afterState.getPendingBalance() >= afterState.autoSettleThreshold) {
+        const threshold = afterState.autoSettleThreshold;
+        if (balanceBefore < threshold && afterState.getPendingBalance() >= threshold) {
           afterState.settleAll();
         }
       },
