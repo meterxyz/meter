@@ -132,6 +132,7 @@ export function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
   const [showHeaderMeterDropdown, setShowHeaderMeterDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
@@ -140,6 +141,18 @@ export function ChatView() {
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
+
+  // Close model picker on click outside (replaces fixed overlay)
+  useEffect(() => {
+    if (!modelPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setModelPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelPickerOpen]);
 
   const headerMeterStats = useMemo(() => {
     const now = Date.now();
@@ -424,23 +437,22 @@ export function ChatView() {
               {/* Connectors bar — top section */}
               <ConnectorsBar />
 
-              {/* Model picker panel (expands inline) */}
-              {modelPickerOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
-                  <div className="relative z-40">
+              {/* Model picker + composer area */}
+              <div ref={modelPickerRef}>
+                {/* Model picker panel (expands inline) */}
+                {modelPickerOpen && (
+                  <>
                     <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
-                  </div>
-                  <div className="h-px bg-border" />
-                </>
-              )}
+                    <div className="h-px bg-border" />
+                  </>
+                )}
 
-              {/* Composer — middle section */}
-              <div className="flex items-end gap-2 border-t border-border/50 p-2">
-                <ModelPickerTrigger
-                  open={modelPickerOpen}
-                  onToggle={() => setModelPickerOpen(!modelPickerOpen)}
-                />
+                {/* Composer — middle section */}
+                <div className="flex items-end gap-2 border-t border-border/50 p-2">
+                  <ModelPickerTrigger
+                    open={modelPickerOpen}
+                    onToggle={() => setModelPickerOpen(!modelPickerOpen)}
+                  />
                 <textarea
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
@@ -465,6 +477,7 @@ export function ChatView() {
                     <polyline points="5 12 12 5 19 12" />
                   </svg>
                 </button>
+                </div>
               </div>
             </div>
 
