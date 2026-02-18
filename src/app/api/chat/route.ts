@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { messages, model, userId, projectId, connectedServices } = await req.json();
+    const { messages, model, userId, projectId, connectedServices, decisionMode } = await req.json();
 
     // Server-side spend limit enforcement
     if (userId) {
@@ -32,12 +32,14 @@ export async function POST(req: NextRequest) {
     }
 
     const connectedIds: string[] = Array.isArray(connectedServices) ? connectedServices : [];
-    const resolvedModel = !model || model === "auto" ? "anthropic/claude-sonnet-4" : model;
+    const resolvedModel = !model || model === "auto" ? "anthropic/claude-sonnet-4.6" : model;
     const encoder = new TextEncoder();
     const tools = getToolsForConnectors(connectedIds);
-    const systemPrompt = buildSystemPrompt(connectedIds);
+    let systemPrompt = buildSystemPrompt(connectedIds);
+    if (decisionMode) {
+      systemPrompt += "\n\n[DECISION MODE ACTIVE] The user has activated Decision Mode. They want to commit to a decision right now. Analyze what they say, make a clear recommendation, and call `save_decision` to log it. Be decisive — no hedging, no long deliberation. Help them decide and move on.";
+    }
 
-    // Build conversation with system prompt
     const conversation: Message[] = [
       { role: "system", content: systemPrompt },
       ...messages.map((m: { role: string; content: string }) => ({
@@ -53,10 +55,9 @@ export async function POST(req: NextRequest) {
         };
 
         const totalTokensOut = { value: 0 };
+        let activeModel = resolvedModel;
 
         try {
-          // The model that actually serves the response (may change if rerouted)
-          let activeModel = resolvedModel;
 
           for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
             const result = await streamWithFallback(

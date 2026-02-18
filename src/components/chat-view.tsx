@@ -2,11 +2,11 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
-import { MeterPill } from "@/components/meter-pill";
+import { DecideButton } from "@/components/decide-button";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { ActionCard } from "@/components/action-card";
-import { SettlePill } from "@/components/settle-pill";
+import { HeaderMeter } from "@/components/header-meter";
 import { ConnectorsBar } from "@/components/connectors-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
@@ -158,6 +158,8 @@ export function ChatView() {
 
   const userId = useMeterStore((s) => s.userId);
   const chatBlocked = useMeterStore((s) => s.chatBlocked);
+  const decisionMode = useMeterStore((s) => s.decisionMode);
+  const setDecisionMode = useMeterStore((s) => s.setDecisionMode);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -346,6 +348,7 @@ export function ChatView() {
           model: selectedModelId,
           userId: userId || undefined,
           projectId: activeProjectId,
+          decisionMode,
           connectedServices: Object.keys(connectedServices).filter(
             (k) => connectedServices[k]
           ),
@@ -425,7 +428,10 @@ export function ChatView() {
         }
       }
 
-      if (finalUsage) finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence, actualModelUsed ?? undefined);
+      if (finalUsage) {
+        finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence, actualModelUsed ?? undefined);
+        if (decisionMode) setDecisionMode(false);
+      }
     } catch {
       // keep silent for now
     } finally {
@@ -473,7 +479,7 @@ export function ChatView() {
             <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
           </div>
           <div className="relative flex items-center gap-2">
-            <SettlePill />
+            <HeaderMeter />
             <button
               onClick={toggleInspector}
               className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 transition-colors hover:bg-foreground/5"
@@ -576,7 +582,7 @@ export function ChatView() {
                     t.style.height = Math.min(t.scrollHeight, 120) + "px";
                   }}
                 />
-                <MeterPill value={todayCost} />
+                <DecideButton />
                 <button
                   onClick={handleSend}
                   disabled={isStreaming}

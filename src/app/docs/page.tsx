@@ -100,7 +100,7 @@ Content-Type: application/json
 
 {
   "messages": [{"role": "user", "content": "Hello"}],
-  "model": "anthropic/claude-sonnet-4"
+  "model": "anthropic/claude-sonnet-4.6"
 }
 
 // Response: SSE stream
