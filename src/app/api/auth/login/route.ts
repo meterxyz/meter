@@ -1,0 +1,146 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseServer } from "@/lib/supabase";
+import {
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from "@simplewebauthn/server";
+import crypto from "crypto";
+
+const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "meter.chat";
+const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
+
+// POST /api/auth/login — start or verify passkey login
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { step, email } = body;
+
+    const supabase = getSupabaseServer();
+
+    if (step === "options") {
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Find user
+      const { data: user } = await supabase
+        .from("meter_users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .single();
+
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      // Get their credentials
+      const { data: creds } = await supabase
+        .from("passkey_credentials")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (!creds || creds.length === 0) {
+        return NextResponse.json({ error: "No passkeys registered" }, { status: 400 });
+      }
+
+      const options = await generateAuthenticationOptions({
+        rpID: RP_ID,
+        allowCredentials: creds.map((c) => ({
+          id: c.credential_id,
+          transports: (c.transports ?? []) as ("ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb")[],
+        })),
+        userVerification: "preferred",
+      });
+
+      // Store challenge
+      const challengeId = crypto.randomBytes(16).toString("hex");
+      await supabase.from("auth_challenges").insert({
+        id: challengeId,
+        email: normalizedEmail,
+        challenge: options.challenge,
+        type: "login",
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+
+      return NextResponse.json({ options, challengeId, userId: user.id });
+    }
+
+    if (step === "verify") {
+      const { challengeId, credential, userId: uid } = body;
+
+      const { data: challengeRecord } = await supabase
+        .from("auth_challenges")
+        .select("*")
+        .eq("id", challengeId)
+        .single();
+
+      if (!challengeRecord) {
+        return NextResponse.json({ error: "Challenge not found" }, { status: 400 });
+      }
+
+      if (new Date(challengeRecord.expires_at) < new Date()) {
+        return NextResponse.json({ error: "Challenge expired" }, { status: 400 });
+      }
+
+      // Find the credential
+      const credentialId = credential.id;
+      const { data: storedCred } = await supabase
+        .from("passkey_credentials")
+        .select("*")
+        .eq("credential_id", credentialId)
+        .eq("user_id", uid)
+        .single();
+
+      if (!storedCred) {
+        return NextResponse.json({ error: "Credential not found" }, { status: 400 });
+      }
+
+      const verification = await verifyAuthenticationResponse({
+        response: credential,
+        expectedChallenge: challengeRecord.challenge,
+        expectedOrigin: ORIGIN,
+        expectedRPID: RP_ID,
+        credential: {
+          id: storedCred.credential_id,
+          publicKey: Buffer.from(storedCred.public_key, "base64url"),
+          counter: storedCred.counter,
+          transports: (storedCred.transports ?? []) as ("ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb")[],
+        },
+      });
+
+      if (!verification.verified) {
+        return NextResponse.json({ error: "Verification failed" }, { status: 400 });
+      }
+
+      // Update counter
+      await supabase
+        .from("passkey_credentials")
+        .update({ counter: verification.authenticationInfo.newCounter })
+        .eq("credential_id", credentialId);
+
+      // Clean up challenge
+      await supabase.from("auth_challenges").delete().eq("id", challengeId);
+
+      // Get user details
+      const { data: user } = await supabase
+        .from("meter_users")
+        .select("*")
+        .eq("id", uid)
+        .single();
+
+      return NextResponse.json({
+        verified: true,
+        user: {
+          id: user?.id,
+          email: user?.email,
+          cardOnFile: !!user?.stripe_customer_id && !!user?.card_last4,
+          cardLast4: user?.card_last4,
+          gmailConnected: user?.gmail_connected ?? false,
+        },
+      });
+    }
+
+    return NextResponse.json({ error: "Invalid step" }, { status: 400 });
+  } catch (err) {
+    console.error("Login error:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

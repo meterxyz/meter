@@ -1,0 +1,151 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseServer } from "@/lib/supabase";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+} from "@simplewebauthn/server";
+import crypto from "crypto";
+
+const RP_NAME = "Meter";
+const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "meter.chat";
+const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
+
+// POST /api/auth/register — start or verify passkey registration
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { step, email } = body;
+
+    const supabase = getSupabaseServer();
+
+    if (step === "options") {
+      // Step 1: Generate registration options
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Create user if doesn't exist
+      let userId: string;
+      const { data: existingUser } = await supabase
+        .from("meter_users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .single();
+
+      if (existingUser) {
+        userId = existingUser.id;
+      } else {
+        userId = `usr_${crypto.randomBytes(12).toString("hex")}`;
+        const { error: insertErr } = await supabase
+          .from("meter_users")
+          .insert({ id: userId, email: normalizedEmail });
+        if (insertErr) throw insertErr;
+      }
+
+      // Get existing credentials for this user (to exclude)
+      const { data: existingCreds } = await supabase
+        .from("passkey_credentials")
+        .select("credential_id")
+        .eq("user_id", userId);
+
+      const options = await generateRegistrationOptions({
+        rpName: RP_NAME,
+        rpID: RP_ID,
+        userName: normalizedEmail,
+        userDisplayName: normalizedEmail.split("@")[0],
+        attestationType: "none",
+        authenticatorSelection: {
+          residentKey: "preferred",
+          userVerification: "preferred",
+        },
+        excludeCredentials: (existingCreds ?? []).map((c) => ({
+          id: c.credential_id,
+        })),
+      });
+
+      // Store challenge
+      const challengeId = crypto.randomBytes(16).toString("hex");
+      await supabase.from("auth_challenges").insert({
+        id: challengeId,
+        email: normalizedEmail,
+        challenge: options.challenge,
+        type: "register",
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+
+      return NextResponse.json({
+        options,
+        challengeId,
+        userId,
+      });
+    }
+
+    if (step === "verify") {
+      // Step 2: Verify registration response
+      const { challengeId, credential, userId: uid } = body;
+
+      const { data: challengeRecord } = await supabase
+        .from("auth_challenges")
+        .select("*")
+        .eq("id", challengeId)
+        .single();
+
+      if (!challengeRecord) {
+        return NextResponse.json({ error: "Challenge not found" }, { status: 400 });
+      }
+
+      if (new Date(challengeRecord.expires_at) < new Date()) {
+        return NextResponse.json({ error: "Challenge expired" }, { status: 400 });
+      }
+
+      const verification = await verifyRegistrationResponse({
+        response: credential,
+        expectedChallenge: challengeRecord.challenge,
+        expectedOrigin: ORIGIN,
+        expectedRPID: RP_ID,
+      });
+
+      if (!verification.verified || !verification.registrationInfo) {
+        return NextResponse.json({ error: "Verification failed" }, { status: 400 });
+      }
+
+      const { credential: regCred, credentialDeviceType, credentialBackedUp } =
+        verification.registrationInfo;
+
+      // Store the credential
+      await supabase.from("passkey_credentials").insert({
+        credential_id: Buffer.from(regCred.id).toString("base64url"),
+        user_id: uid,
+        public_key: Buffer.from(regCred.publicKey).toString("base64url"),
+        counter: regCred.counter,
+        device_type: credentialDeviceType,
+        backed_up: credentialBackedUp,
+        transports: credential.response?.transports ?? [],
+      });
+
+      // Clean up challenge
+      await supabase.from("auth_challenges").delete().eq("id", challengeId);
+
+      // Get user
+      const { data: user } = await supabase
+        .from("meter_users")
+        .select("*")
+        .eq("id", uid)
+        .single();
+
+      return NextResponse.json({
+        verified: true,
+        user: {
+          id: user?.id,
+          email: user?.email,
+          cardOnFile: !!user?.stripe_customer_id && !!user?.card_last4,
+          cardLast4: user?.card_last4,
+          gmailConnected: user?.gmail_connected ?? false,
+        },
+      });
+    }
+
+    return NextResponse.json({ error: "Invalid step" }, { status: 400 });
+  } catch (err) {
+    console.error("Register error:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

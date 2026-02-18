@@ -51,6 +51,8 @@ interface MeterState {
   authenticated: boolean;
   cardOnFile: boolean;
   cardLast4: string | null;
+  stripeCustomerId: string | null;
+  gmailConnected: boolean;
 
   selectedModelId: string;
   spendingCapEnabled: boolean;
@@ -66,6 +68,8 @@ interface MeterState {
 
   setAuth: (userId: string, email: string) => void;
   setCardOnFile: (v: boolean, last4?: string) => void;
+  setStripeCustomerId: (id: string) => void;
+  setGmailConnected: (v: boolean) => void;
   logout: () => void;
 
   addProject: (name: string) => void;
@@ -150,6 +154,8 @@ export const useMeterStore = create<MeterState>()(
       authenticated: false,
       cardOnFile: false,
       cardLast4: null,
+      stripeCustomerId: null,
+      gmailConnected: false,
 
       selectedModelId: DEFAULT_MODEL.id,
       spendingCapEnabled: false,
@@ -165,6 +171,8 @@ export const useMeterStore = create<MeterState>()(
 
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
       setCardOnFile: (v, last4) => set({ cardOnFile: v, cardLast4: last4 ?? null }),
+      setStripeCustomerId: (id) => set({ stripeCustomerId: id }),
+      setGmailConnected: (v) => set({ gmailConnected: v }),
 
       logout: () =>
         set({
@@ -173,6 +181,8 @@ export const useMeterStore = create<MeterState>()(
           authenticated: false,
           cardOnFile: false,
           cardLast4: null,
+          stripeCustomerId: null,
+          gmailConnected: false,
           projects: initialProjects,
           activeProjectId: "meter",
           inspectorOpen: false,
@@ -358,6 +368,8 @@ export const useMeterStore = create<MeterState>()(
         authenticated: s.authenticated,
         cardOnFile: s.cardOnFile,
         cardLast4: s.cardLast4,
+        stripeCustomerId: s.stripeCustomerId,
+        gmailConnected: s.gmailConnected,
         selectedModelId: s.selectedModelId,
         spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,
