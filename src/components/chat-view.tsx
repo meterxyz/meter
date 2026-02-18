@@ -428,7 +428,9 @@ export function ChatView() {
               {modelPickerOpen && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setModelPickerOpen(false)} />
-                  <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
+                  <div className="relative z-40">
+                    <ModelPickerPanel onClose={() => setModelPickerOpen(false)} />
+                  </div>
                   <div className="h-px bg-border" />
                 </>
               )}
