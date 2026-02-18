@@ -24,33 +24,58 @@ function ErrorCard({ payload }: { payload: string }) {
   const setSelectedModelId = useMeterStore((s) => s.setSelectedModelId);
   let code = "unknown";
   let model = "";
+  let provider = "";
+  let retryAfter: string | null = null;
   try {
     const parsed = JSON.parse(payload);
     code = parsed.code ?? "unknown";
     model = parsed.model ?? "";
+    provider = parsed.provider ?? "";
+    retryAfter = parsed.retryAfter ?? null;
   } catch { /* ignore */ }
 
-  const modelLabel = model ? shortModelName(model) : "this model";
+  const modelLabel = model ? shortModelName(model) : "This model";
   const isRateLimit = code === "rate_limit";
 
+  // Format reset time if available
+  let resetLabel = "";
+  if (retryAfter) {
+    const secs = Number(retryAfter);
+    if (!isNaN(secs) && secs > 0) {
+      // retry-after is seconds
+      const mins = Math.ceil(secs / 60);
+      resetLabel = mins <= 1 ? "resets in ~1 minute" : `resets in ~${mins} minutes`;
+    } else {
+      // Could be a date string
+      const date = new Date(retryAfter);
+      if (!isNaN(date.getTime())) {
+        const diffMs = date.getTime() - Date.now();
+        if (diffMs > 0) {
+          const mins = Math.ceil(diffMs / 60000);
+          resetLabel = mins <= 1 ? "resets in ~1 minute" : `resets in ~${mins} minutes`;
+        }
+      }
+    }
+  }
+
+  const providerLabel = provider || "the provider";
+
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+    <div className="flex flex-col gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
         <p className="font-mono text-[11px] text-foreground/70">
           {isRateLimit
-            ? `${modelLabel} is temporarily rate-limited. Switch to another model or try again shortly.`
+            ? `${modelLabel} is being rate-limited by ${providerLabel}${resetLabel ? ` \u2014 ${resetLabel}` : ""}. Switch to Auto to continue the conversation.`
             : `Something went wrong with ${modelLabel}. Try again or switch models.`}
         </p>
       </div>
-      {isRateLimit && (
-        <button
-          onClick={() => setSelectedModelId("auto")}
-          className="self-start rounded-md bg-foreground/10 px-3 py-1 font-mono text-[11px] text-foreground/80 hover:bg-foreground/15 transition-colors"
-        >
-          Switch to Auto
-        </button>
-      )}
+      <button
+        onClick={() => setSelectedModelId("auto")}
+        className="self-start rounded-md bg-foreground/10 px-3 py-1.5 font-mono text-[11px] text-foreground/80 hover:bg-foreground/15 transition-colors"
+      >
+        Switch to Auto
+      </button>
     </div>
   );
 }
@@ -368,6 +393,8 @@ export function ChatView() {
               const errorPayload = JSON.stringify({
                 code: data.code,
                 model: data.model,
+                provider: data.provider,
+                retryAfter: data.retryAfter,
                 message: data.message,
               });
               fullContent = `__error__${errorPayload}`;

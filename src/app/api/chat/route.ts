@@ -164,15 +164,38 @@ export async function POST(req: NextRequest) {
             // Loop continues — model will see tool results and respond
           }
         } catch (streamErr) {
-          const err = streamErr as Error & { status?: number; code?: string };
+          const err = streamErr as Error & {
+            status?: number;
+            code?: string;
+            headers?: Headers;
+            error?: Record<string, unknown>;
+          };
           const isRateLimit =
             err.status === 429 ||
             err.code === "rate_limit_exceeded" ||
             /rate.?limit/i.test(err.message);
+
+          // Extract retry/reset timing from headers or error body
+          let retryAfter: string | null = null;
+          if (err.headers) {
+            retryAfter =
+              err.headers.get("retry-after") ||
+              err.headers.get("x-ratelimit-reset") ||
+              err.headers.get("x-ratelimit-reset-requests") ||
+              null;
+          }
+
+          // Extract provider name from model id (e.g. "anthropic/claude-opus-4" → "Anthropic")
+          const provider = resolvedModel.includes("/")
+            ? resolvedModel.split("/")[0].charAt(0).toUpperCase() + resolvedModel.split("/")[0].slice(1)
+            : null;
+
           send({
             type: "error",
             code: isRateLimit ? "rate_limit" : "unknown",
             model: resolvedModel,
+            provider,
+            retryAfter,
             message: err.message,
           });
         }
