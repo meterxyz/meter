@@ -169,9 +169,9 @@ export function ChatView() {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [rerouting, setRerouting] = useState<{ provider: string; toModel: string } | null>(null);
   const isNearBottomRef = useRef(true);
+  const userScrolledAwayRef = useRef(false);
   const hasInitialScrolled = useRef(false);
 
-  // Reset instant-scroll flag when switching projects so we don't animate through history
   useEffect(() => {
     hasInitialScrolled.current = false;
   }, [activeProjectId]);
@@ -181,7 +181,6 @@ export function ChatView() {
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
 
-  // Close model picker on click outside (replaces fixed overlay)
   useEffect(() => {
     if (!modelPickerOpen) return;
     const handler = (e: MouseEvent) => {
@@ -214,18 +213,51 @@ export function ChatView() {
     setTimeout(() => setSwitchingProjectName(null), 700);
   };
 
-  // Track whether user is scrolled near the bottom
+  // Detect user-initiated scroll-away via wheel / touch.
+  // This avoids the fight where programmatic scrollIntoView triggers onScroll
+  // which resets our "near bottom" flag and causes a snap-back loop.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY < 0) {
+        userScrolledAwayRef.current = true;
+      }
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      (el as unknown as Record<string, number>)._touchY = e.touches[0].clientY;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const startY = (el as unknown as Record<string, number>)._touchY;
+      if (startY !== undefined && e.touches[0].clientY > startY) {
+        userScrolledAwayRef.current = true;
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
+
+  // Re-enable auto-scroll once user scrolls back to bottom
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const threshold = 80;
-    isNearBottomRef.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    isNearBottomRef.current = nearBottom;
+    if (nearBottom) {
+      userScrolledAwayRef.current = false;
+    }
   }, []);
 
-  // Auto-scroll to bottom when content changes and user was at bottom
-  // On first mount, jump instantly so we don't animate through history
+  // Auto-scroll: only when user hasn't deliberately scrolled away
   useEffect(() => {
+    if (userScrolledAwayRef.current) return;
     if (!isNearBottomRef.current) return;
     if (!hasInitialScrolled.current) {
       hasInitialScrolled.current = true;
@@ -244,6 +276,7 @@ export function ChatView() {
       input.value = "";
       input.style.height = "auto";
       isNearBottomRef.current = true;
+      userScrolledAwayRef.current = false;
       addMessage({
         id: Math.random().toString(36).slice(2, 10),
         role: "user",
@@ -265,8 +298,8 @@ export function ChatView() {
     input.value = "";
     input.style.height = "auto";
 
-    // Snap to bottom when user sends a message
     isNearBottomRef.current = true;
+    userScrolledAwayRef.current = false;
 
     const userMsg: ChatMessage = {
       id: Math.random().toString(36).slice(2, 10),
