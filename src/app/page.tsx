@@ -6,19 +6,16 @@ import { useMeterStore } from "@/lib/store";
 import { ChatView } from "@/components/chat-view";
 import { LoginScreen } from "@/components/login-screen";
 import { AuthorizeScreen } from "@/components/authorize-screen";
-import { GmailScreen } from "@/components/gmail-screen";
 
 function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const authenticated = useMeterStore((s) => s.authenticated);
   const cardOnFile = useMeterStore((s) => s.cardOnFile);
-  const connectedServices = useMeterStore((s) => s.connectedServices);
   const connectService = useMeterStore((s) => s.connectService);
   const fetchConnectionStatus = useMeterStore((s) => s.fetchConnectionStatus);
-  const gmailConnected = !!connectedServices.gmail;
 
-  // Handle OAuth callback redirect
+  // Handle OAuth callback redirect (still needed for Connections page)
   useEffect(() => {
     const oauthResult = searchParams.get("oauth");
     const provider = searchParams.get("provider");
@@ -36,17 +33,13 @@ function HomeInner() {
     }
   }, [authenticated, fetchConnectionStatus]);
 
-  // Flow: Email/Passkey → Card → Gmail → Chat
+  // Flow: Passkey → Card → Chat
   if (!authenticated) {
     return <LoginScreen />;
   }
 
   if (!cardOnFile) {
     return <AuthorizeScreen />;
-  }
-
-  if (!gmailConnected) {
-    return <GmailScreen />;
   }
 
   return <ChatView />;

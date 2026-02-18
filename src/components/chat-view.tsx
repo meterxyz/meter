@@ -147,6 +147,7 @@ export function ChatView() {
   const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const isNearBottomRef = useRef(true);
+  const hasInitialScrolled = useRef(false);
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
@@ -216,8 +217,13 @@ export function ChatView() {
   }, []);
 
   // Auto-scroll to bottom when content changes and user was at bottom
+  // On first mount, jump instantly so we don't animate through history
   useEffect(() => {
-    if (isNearBottomRef.current) {
+    if (!isNearBottomRef.current) return;
+    if (!hasInitialScrolled.current) {
+      hasInitialScrolled.current = true;
+      bottomRef.current?.scrollIntoView();
+    } else {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
