@@ -9,8 +9,8 @@ const csp = `
   object-src 'none';
   base-uri 'self';
   form-action 'self';
-  connect-src 'self' https://openrouter.ai https://js.stripe.com https://api.stripe.com https://*.supabase.co;
-  frame-src https://js.stripe.com;
+  connect-src 'self' https://openrouter.ai https://js.stripe.com https://api.stripe.com https://*.supabase.co https://accounts.google.com https://oauth2.googleapis.com https://github.com https://api.github.com https://vercel.com https://api.vercel.com https://connect.stripe.com https://api.mercury.com https://api.ramp.com;
+  frame-src https://js.stripe.com https://accounts.google.com;
   worker-src 'self' blob:;
   manifest-src 'self';
 `.replace(/\n/g, ' ').trim();

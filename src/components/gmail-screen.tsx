@@ -1,19 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import { useMeterStore } from "@/lib/store";
+import { initiateOAuthFlow } from "@/lib/oauth-client";
 import Image from "next/image";
 
 export function GmailScreen() {
-  const { email, connectService } = useMeterStore();
-  const [loading, setLoading] = useState(false);
+  const { email, userId, connectService } = useMeterStore();
 
-  const handleConnect = async () => {
-    setLoading(true);
-    // TODO: Implement real Gmail OAuth flow
-    // For now, simulate connection
-    await new Promise((r) => setTimeout(r, 800));
-    connectService("gmail");
+  const handleConnect = () => {
+    if (userId) {
+      initiateOAuthFlow("gmail", userId);
+    }
   };
 
   const handleSkip = () => {
@@ -49,16 +46,9 @@ export function GmailScreen() {
 
         <button
           onClick={handleConnect}
-          disabled={loading}
-          className="w-full rounded-xl bg-foreground py-3.5 font-mono text-sm text-background transition-colors hover:bg-foreground/90 disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full rounded-xl bg-foreground py-3.5 font-mono text-sm text-background transition-colors hover:bg-foreground/90 flex items-center justify-center gap-2"
         >
-          {loading && (
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
-          {loading ? "Connecting..." : "Connect Gmail"}
+          Connect Gmail
         </button>
 
         <button
