@@ -64,6 +64,8 @@ interface MeterState {
 
   pendingCharges: { id: string; title: string; cost: number }[];
 
+  pendingInput: string | null;
+
   inspectorOpen: boolean;
   inspectorTab: string;
 
@@ -88,6 +90,8 @@ interface MeterState {
 
   approveCard: (messageId: string, cardId: string) => void;
   rejectCard: (messageId: string, cardId: string) => void;
+
+  setPendingInput: (v: string | null) => void;
 
   toggleInspector: () => void;
   setInspectorOpen: (v: boolean) => void;
@@ -171,6 +175,8 @@ export const useMeterStore = create<MeterState>()(
       activeProjectId: "meter",
 
       pendingCharges: [],
+
+      pendingInput: null,
 
       inspectorOpen: false,
       inspectorTab: "usage",
@@ -405,6 +411,8 @@ export const useMeterStore = create<MeterState>()(
           const updated = { ...active, isStreaming: v };
           return { projects: replaceActiveProject(s, updated) };
         }),
+
+      setPendingInput: (v) => set({ pendingInput: v }),
 
       toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
       setInspectorOpen: (v) => set({ inspectorOpen: v }),

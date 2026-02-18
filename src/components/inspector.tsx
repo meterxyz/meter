@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { useDecisionsStore, Decision } from "@/lib/decisions-store";
 
@@ -298,35 +299,104 @@ function SettingsTab({
 /* ─── DECISIONS TAB ─── */
 function DecisionRow({ decision }: { decision: Decision }) {
   const { archiveDecision } = useDecisionsStore();
+  const setPendingInput = useMeterStore((s) => s.setPendingInput);
+  const [expanded, setExpanded] = useState(false);
   const isDecided = decision.status === "decided";
 
+  const handleRevisit = () => {
+    const msg = isDecided
+      ? `I want to revisit the decision "${decision.title}" — we chose "${decision.choice}". Can we reconsider this?`
+      : `Let's discuss the open decision "${decision.title}" and make a call.`;
+    setPendingInput(msg);
+  };
+
   return (
-    <div className="group flex items-center gap-2 py-1.5 hover:bg-foreground/[0.02] transition-colors rounded-md px-1">
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-          isDecided ? "bg-emerald-500" : "bg-amber-500"
-        }`}
-      />
-      <span className="flex-1 truncate font-mono text-[11px] text-foreground/80">
-        {decision.title}
-      </span>
-      <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => archiveDecision(decision.id)}
-          className="rounded px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
-        >
-          archive
-        </button>
-      </div>
-      <span
-        className={`group-hover:hidden shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-          isDecided
-            ? "bg-emerald-500/10 text-emerald-500"
-            : "bg-amber-500/10 text-amber-500"
-        }`}
+    <div className="rounded-md transition-colors">
+      {/* Header row */}
+      <div
+        className="group flex items-center gap-2 py-1.5 px-1 cursor-pointer hover:bg-foreground/[0.02]"
+        onClick={() => setExpanded(!expanded)}
       >
-        {isDecided ? "decided" : "open"}
-      </span>
+        {/* Expand chevron */}
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`shrink-0 text-muted-foreground/40 transition-transform ${expanded ? "rotate-90" : ""}`}
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+            isDecided ? "bg-emerald-500" : "bg-amber-500"
+          }`}
+        />
+        <span className="flex-1 truncate font-mono text-[11px] text-foreground/80">
+          {decision.title}
+        </span>
+        <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleRevisit(); }}
+            className="rounded px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+          >
+            revisit
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); archiveDecision(decision.id); }}
+            className="rounded px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+          >
+            archive
+          </button>
+        </div>
+        <span
+          className={`group-hover:hidden shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+            isDecided
+              ? "bg-emerald-500/10 text-emerald-500"
+              : "bg-amber-500/10 text-amber-500"
+          }`}
+        >
+          {isDecided ? "decided" : "open"}
+        </span>
+      </div>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div className="ml-6 mr-1 mb-2 mt-0.5 flex flex-col gap-1.5 border-l border-border/40 pl-3">
+          {decision.choice && (
+            <div>
+              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Choice</span>
+              <p className="font-mono text-[11px] text-foreground/70 mt-0.5">{decision.choice}</p>
+            </div>
+          )}
+          {decision.alternatives && decision.alternatives.length > 0 && (
+            <div>
+              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Alternatives</span>
+              <ul className="mt-0.5">
+                {decision.alternatives.map((alt, i) => (
+                  <li key={i} className="font-mono text-[11px] text-foreground/50 flex items-start gap-1.5">
+                    <span className="text-muted-foreground/30 mt-px">-</span>
+                    {alt}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {decision.reasoning && (
+            <div>
+              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Reasoning</span>
+              <p className="font-mono text-[11px] text-foreground/50 mt-0.5">{decision.reasoning}</p>
+            </div>
+          )}
+          {!decision.choice && !decision.reasoning && (!decision.alternatives || decision.alternatives.length === 0) && (
+            <p className="font-mono text-[10px] text-muted-foreground/30 italic">No details recorded</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
