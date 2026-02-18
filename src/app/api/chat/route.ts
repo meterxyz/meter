@@ -1,22 +1,17 @@
 import { NextRequest } from "next/server";
-import OpenAI from "openai";
 import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/tools";
-
-function getOpenRouterClient() {
-  return new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1",
-  });
-}
+import { streamWithFallback, type Send } from "@/lib/fallback";
+import type OpenAI from "openai";
 
 type Message = OpenAI.Chat.ChatCompletionMessageParam;
 
 const MAX_TOOL_ROUNDS = 5;
 
 export async function POST(req: NextRequest) {
-  if (!process.env.OPENROUTER_API_KEY) {
+  // At least one provider must be configured
+  if (!process.env.OPENROUTER_API_KEY && !process.env.CLAUDE_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
     return new Response(
-      JSON.stringify({ error: "OPENROUTER_API_KEY is not configured" }),
+      JSON.stringify({ error: "No API keys configured" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -25,7 +20,6 @@ export async function POST(req: NextRequest) {
     const { messages, model, userId, projectId, connectedServices } = await req.json();
     const connectedIds: string[] = Array.isArray(connectedServices) ? connectedServices : [];
     const resolvedModel = !model || model === "auto" ? "anthropic/claude-sonnet-4" : model;
-    const openrouter = getOpenRouterClient();
     const encoder = new TextEncoder();
     const tools = getToolsForConnectors(connectedIds);
     const systemPrompt = buildSystemPrompt(connectedIds);
@@ -41,85 +35,37 @@ export async function POST(req: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (data: Record<string, unknown>) => {
+        const send: Send = (data) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
-        let totalTokensOut = 0;
+        const totalTokensOut = { value: 0 };
 
         try {
+          // The model that actually serves the response (may change if rerouted)
+          let activeModel = resolvedModel;
+
           for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-            const response = await openrouter.chat.completions.create({
-              model: resolvedModel,
-              messages: conversation,
+            const result = await streamWithFallback(
+              activeModel,
+              conversation,
               tools,
-              stream: true,
-              stream_options: { include_usage: true },
-            });
+              send,
+              estimateTokens,
+              totalTokensOut,
+            );
 
-            let textContent = "";
-            const toolCalls = new Map<
-              number,
-              { id: string; name: string; arguments: string }
-            >();
-            let hasToolCalls = false;
-
-            for await (const chunk of response) {
-              const choice = chunk.choices?.[0];
-              if (!choice) {
-                // Usage-only chunk (no choices)
-                if (chunk.usage) {
-                  send({
-                    type: "usage",
-                    tokensIn: chunk.usage.prompt_tokens,
-                    tokensOut: chunk.usage.completion_tokens,
-                  });
-                }
-                continue;
-              }
-
-              // Stream text content to client immediately
-              const delta = choice.delta?.content || "";
-              if (delta) {
-                textContent += delta;
-                totalTokensOut += estimateTokens(delta);
-                send({ type: "delta", content: delta, tokensOut: totalTokensOut });
-              }
-
-              // Accumulate tool calls from deltas
-              if (choice.delta?.tool_calls) {
-                hasToolCalls = true;
-                for (const tc of choice.delta.tool_calls) {
-                  const existing = toolCalls.get(tc.index) || {
-                    id: "",
-                    name: "",
-                    arguments: "",
-                  };
-                  if (tc.id) existing.id = tc.id;
-                  if (tc.function?.name) existing.name = tc.function.name;
-                  if (tc.function?.arguments) existing.arguments += tc.function.arguments;
-                  toolCalls.set(tc.index, existing);
-                }
-              }
-
-              // Usage info
-              if (chunk.usage) {
-                send({
-                  type: "usage",
-                  tokensIn: chunk.usage.prompt_tokens,
-                  tokensOut: chunk.usage.completion_tokens,
-                });
-              }
-            }
+            // Track which model actually responded (for subsequent tool rounds)
+            activeModel = result.actualModel;
 
             // No tool calls → done
-            if (!hasToolCalls || toolCalls.size === 0) break;
+            if (!result.hasToolCalls || result.toolCalls.size === 0) break;
 
             // Add assistant message with tool calls to conversation
             conversation.push({
               role: "assistant",
-              content: textContent || null,
-              tool_calls: Array.from(toolCalls.values()).map((tc) => ({
+              content: result.textContent || null,
+              tool_calls: Array.from(result.toolCalls.values()).map((tc) => ({
                 id: tc.id,
                 type: "function" as const,
                 function: { name: tc.name, arguments: tc.arguments },
@@ -127,8 +73,7 @@ export async function POST(req: NextRequest) {
             });
 
             // Execute each tool call
-            for (const tc of toolCalls.values()) {
-              // Notify client about tool usage
+            for (const tc of result.toolCalls.values()) {
               send({ type: "tool_call", name: tc.name });
 
               let args: Record<string, unknown> = {};
@@ -138,9 +83,8 @@ export async function POST(req: NextRequest) {
                 // malformed args — pass empty
               }
 
-              const result = await executeTool(tc.name, args, { userId, projectId });
+              const toolResult = await executeTool(tc.name, args, { userId, projectId });
 
-              // Send tool result with args for client-side state sync
               const toolResultEvent: Record<string, unknown> = { type: "tool_result", name: tc.name };
               if (tc.name === "save_decision") {
                 toolResultEvent.decision = {
@@ -153,72 +97,21 @@ export async function POST(req: NextRequest) {
               }
               send(toolResultEvent);
 
-              // Add tool result to conversation
               conversation.push({
                 role: "tool",
                 tool_call_id: tc.id,
-                content: result,
+                content: toolResult,
               });
             }
-
-            // Loop continues — model will see tool results and respond
           }
-        } catch (streamErr) {
-          const err = streamErr as Error & {
-            status?: number;
-            code?: string;
-            type?: string;
-            headers?: Headers;
-            error?: Record<string, unknown>;
-          };
-
-          console.error("[chat stream error]", {
-            status: err.status,
-            code: err.code,
-            type: err.type,
-            message: err.message,
-            error: err.error,
-          });
-
-          // Broad rate limit detection — check status, code, type, message, and nested error body
-          const errorStr = JSON.stringify(err.error ?? "").toLowerCase();
-          const msgStr = (err.message ?? "").toLowerCase();
-          const isRateLimit =
-            err.status === 429 ||
-            err.code === "rate_limit_exceeded" ||
-            err.type === "rate_limit_error" ||
-            /rate.?limit|too many request|quota|throttl|capacity|overloaded/i.test(msgStr) ||
-            /rate.?limit|too many request|quota|throttl|capacity|overloaded/i.test(errorStr);
-
-          // Extract retry/reset timing from headers or error body
-          let retryAfter: string | null = null;
-          if (err.headers) {
-            retryAfter =
-              err.headers.get("retry-after") ||
-              err.headers.get("x-ratelimit-reset") ||
-              err.headers.get("x-ratelimit-reset-requests") ||
-              err.headers.get("x-ratelimit-reset-tokens") ||
-              null;
-          }
-          // Also check nested error body for reset info
-          if (!retryAfter && err.error) {
-            const metadata = err.error.metadata as Record<string, unknown> | undefined;
-            if (metadata?.retry_after) retryAfter = String(metadata.retry_after);
-            if (metadata?.reset) retryAfter = String(metadata.reset);
-          }
-
-          // Extract provider name from model id (e.g. "anthropic/claude-opus-4" → "Anthropic")
-          const provider = resolvedModel.includes("/")
-            ? resolvedModel.split("/")[0].charAt(0).toUpperCase() + resolvedModel.split("/")[0].slice(1)
-            : null;
+        } catch (err) {
+          // All fallback tiers exhausted — show error to client
+          console.error("[chat] all providers failed:", (err as Error).message);
 
           send({
             type: "error",
-            code: isRateLimit ? "rate_limit" : "unknown",
+            code: "all_providers_failed",
             model: resolvedModel,
-            provider,
-            retryAfter,
-            message: err.message,
           });
         }
 
