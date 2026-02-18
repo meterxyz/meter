@@ -170,6 +170,8 @@ export function ChatView() {
   const [rerouting, setRerouting] = useState<{ provider: string; toModel: string } | null>(null);
   const isNearBottomRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
+  const scrollAwayAtRef = useRef(0);
+  const isProgrammaticScrollRef = useRef(false);
   const hasInitialScrolled = useRef(false);
 
   useEffect(() => {
@@ -213,24 +215,24 @@ export function ChatView() {
     setTimeout(() => setSwitchingProjectName(null), 700);
   };
 
-  // Detect user-initiated scroll-away via wheel / touch.
-  // This avoids the fight where programmatic scrollIntoView triggers onScroll
-  // which resets our "near bottom" flag and causes a snap-back loop.
+  // Detect user-initiated scroll-up via wheel / touch to pause auto-scroll.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       if (e.deltaY < 0) {
         userScrolledAwayRef.current = true;
+        scrollAwayAtRef.current = Date.now();
       }
     };
+    let touchStartY = 0;
     const onTouchStart = (e: TouchEvent) => {
-      (el as unknown as Record<string, number>)._touchY = e.touches[0].clientY;
+      touchStartY = e.touches[0].clientY;
     };
     const onTouchMove = (e: TouchEvent) => {
-      const startY = (el as unknown as Record<string, number>)._touchY;
-      if (startY !== undefined && e.touches[0].clientY > startY) {
+      if (e.touches[0].clientY > touchStartY) {
         userScrolledAwayRef.current = true;
+        scrollAwayAtRef.current = Date.now();
       }
     };
     el.addEventListener("wheel", onWheel, { passive: true });
@@ -243,28 +245,37 @@ export function ChatView() {
     };
   }, []);
 
-  // Re-enable auto-scroll once user scrolls back to bottom
   const handleScroll = useCallback(() => {
+    if (isProgrammaticScrollRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
-    const threshold = 80;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     isNearBottomRef.current = nearBottom;
-    if (nearBottom) {
+    // Only re-enable auto-scroll if user has returned to the bottom AND
+    // enough time has passed since they scrolled away (prevents the first
+    // tiny wheel-up tick from being immediately cleared).
+    if (nearBottom && Date.now() - scrollAwayAtRef.current > 500) {
       userScrolledAwayRef.current = false;
     }
   }, []);
 
-  // Auto-scroll: only when user hasn't deliberately scrolled away
+  // Auto-scroll using instant scrollTop (no smooth animation that fights
+  // with user scroll). Guarded by isProgrammaticScrollRef so our own scroll
+  // doesn't re-enter handleScroll and clear userScrolledAway.
   useEffect(() => {
     if (userScrolledAwayRef.current) return;
-    if (!isNearBottomRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
     if (!hasInitialScrolled.current) {
       hasInitialScrolled.current = true;
-      bottomRef.current?.scrollIntoView();
-    } else {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      el.scrollTop = el.scrollHeight;
+      return;
     }
+    isProgrammaticScrollRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
   }, [messages]);
 
   const handleSend = async () => {
