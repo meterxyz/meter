@@ -373,7 +373,7 @@ function DecisionRow({ decision }: { decision: Decision }) {
               <p className="font-mono text-[11px] text-foreground/70 mt-0.5">{decision.choice}</p>
             </div>
           )}
-          {decision.alternatives && decision.alternatives.length > 0 && (
+          {Array.isArray(decision.alternatives) && decision.alternatives.length > 0 && (
             <div>
               <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Alternatives</span>
               <ul className="mt-0.5">
@@ -392,7 +392,7 @@ function DecisionRow({ decision }: { decision: Decision }) {
               <p className="font-mono text-[11px] text-foreground/50 mt-0.5">{decision.reasoning}</p>
             </div>
           )}
-          {!decision.choice && !decision.reasoning && (!decision.alternatives || decision.alternatives.length === 0) && (
+          {!decision.choice && !decision.reasoning && (!Array.isArray(decision.alternatives) || decision.alternatives.length === 0) && (
             <p className="font-mono text-[10px] text-muted-foreground/30 italic">No details recorded</p>
           )}
         </div>
