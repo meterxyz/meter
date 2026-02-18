@@ -55,8 +55,16 @@ function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string
   );
 }
 
-/* ─── Thinking indicator with shimmer ─── */
-function ThinkingIndicator() {
+/* ─── Thinking / tool-use indicator with shimmer ─── */
+const TOOL_LABELS: Record<string, string> = {
+  web_search: "Searching the web",
+  save_decision: "Saving decision",
+  list_decisions: "Recalling decisions",
+  get_current_datetime: "Checking date",
+};
+
+function ThinkingIndicator({ toolName }: { toolName?: string | null }) {
+  const label = toolName ? TOOL_LABELS[toolName] ?? toolName : "Thinking";
   return (
     <div className="flex items-center gap-2 px-4 py-3 mb-4">
       <svg
@@ -69,7 +77,7 @@ function ThinkingIndicator() {
         <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="20 14" />
       </svg>
       <span className="thinking-shimmer text-sm font-medium select-none">
-        Thinking
+        {label}
       </span>
     </div>
   );
@@ -104,6 +112,8 @@ export function ChatView() {
   const todayTokens = (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0);
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
+  const userId = useMeterStore((s) => s.userId);
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -111,6 +121,7 @@ export function ChatView() {
   const [showHeaderMeterDropdown, setShowHeaderMeterDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const isNearBottomRef = useRef(true);
 
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
@@ -217,7 +228,12 @@ export function ChatView() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: allMessages, model: selectedModelId }),
+        body: JSON.stringify({
+          messages: allMessages,
+          model: selectedModelId,
+          userId: userId || undefined,
+          projectId: activeProjectId,
+        }),
       });
 
       if (!res.ok) throw new Error(`Chat API failed (${res.status})`);
@@ -246,7 +262,12 @@ export function ChatView() {
             const data = JSON.parse(payload);
             if (data.type === "delta") {
               fullContent += data.content;
+              setActiveTool(null);
               updateLastAssistantMessage(fullContent, data.tokensOut);
+            } else if (data.type === "tool_call") {
+              setActiveTool(data.name as string);
+            } else if (data.type === "tool_result") {
+              // Tool finished — will go back to thinking/streaming
             } else if (data.type === "usage") {
               finalUsage = {
                 tokensIn: data.tokensIn,
@@ -265,6 +286,7 @@ export function ChatView() {
       // keep silent for now
     } finally {
       setStreaming(false);
+      setActiveTool(null);
     }
   };
 
@@ -290,7 +312,7 @@ export function ChatView() {
   }, []);
 
   const lastMsg = messages[messages.length - 1];
-  const showThinking = isStreaming && lastMsg?.role === "assistant" && lastMsg.content === "";
+  const showThinking = isStreaming && (activeTool || (lastMsg?.role === "assistant" && lastMsg.content === ""));
 
   return (
     <div className="flex h-screen bg-background">
@@ -381,8 +403,8 @@ export function ChatView() {
               </div>
             ))}
 
-            {/* Thinking indicator — shows when waiting for first token */}
-            {showThinking && <ThinkingIndicator />}
+            {/* Thinking / tool indicator — shows when waiting or using tools */}
+            {showThinking && <ThinkingIndicator toolName={activeTool} />}
 
             {/* Scroll anchor */}
             <div ref={bottomRef} />

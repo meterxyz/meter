@@ -1,0 +1,207 @@
+import { getSupabaseServer } from "@/lib/supabase";
+
+/* ─── Tool schemas (OpenAI function-calling format) ─────────────── */
+
+export const TOOL_DEFINITIONS: {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}[] = [
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the web for current information. Use when the user asks about current events, recent data, prices, news, documentation, or anything that may have changed recently.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The search query" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_current_datetime",
+      description:
+        "Get the current date and time. Use when the user asks about today's date, what day it is, or needs temporal context.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_decision",
+      description:
+        "Save a decision or recommendation so the user can track it. Use when the user makes a choice, reaches a conclusion, or asks for a recommendation they should remember.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short title for the decision" },
+          choice: { type: "string", description: "The chosen option or recommendation" },
+          alternatives: {
+            type: "array",
+            items: { type: "string" },
+            description: "Other options that were considered",
+          },
+          reasoning: { type: "string", description: "Why this choice was made" },
+        },
+        required: ["title", "choice"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_decisions",
+      description:
+        "List all saved decisions for the user. Use when they ask about previous decisions or want to review past choices.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+];
+
+/* ─── System prompt ─────────────────────────────────────────────── */
+
+export const SYSTEM_PROMPT = `You are Meter — an AI assistant that can search the web, track decisions, and help users build things.
+
+You have tools. Use them:
+- web_search: Search the web for anything current — news, docs, prices, APIs, etc. Use this proactively when questions touch on recent events or data you're unsure about.
+- save_decision: Log important decisions when the user makes a choice or asks you to recommend something. This helps them track what was decided and why.
+- list_decisions: Recall past decisions when the user asks "what did we decide" or references earlier choices.
+- get_current_datetime: Know what day/time it is.
+
+Be direct and concise. When citing search results, mention the source. Don't apologize for using tools — just use them when they'll help.`;
+
+/* ─── Tool execution ────────────────────────────────────────────── */
+
+interface ToolContext {
+  userId?: string;
+  projectId?: string;
+}
+
+export async function executeTool(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: ToolContext
+): Promise<string> {
+  switch (name) {
+    case "web_search":
+      return webSearch(args.query as string);
+    case "get_current_datetime":
+      return getCurrentDatetime();
+    case "save_decision":
+      return saveDecision(args, ctx);
+    case "list_decisions":
+      return listDecisions(ctx);
+    default:
+      return `Unknown tool: ${name}`;
+  }
+}
+
+/* ── web_search ────────────────────────────────────────────────── */
+
+async function webSearch(query: string): Promise<string> {
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) {
+    return "Web search is not configured (BRAVE_SEARCH_API_KEY missing). Answer from your training data instead.";
+  }
+
+  try {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`;
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": apiKey,
+      },
+    });
+
+    if (!res.ok) return `Search failed (${res.status}). Answer from your training data instead.`;
+
+    const data = await res.json();
+    const results = (data.web?.results ?? []) as {
+      title: string;
+      url: string;
+      description: string;
+    }[];
+
+    if (results.length === 0) return "No results found.";
+
+    return results
+      .map((r) => `**${r.title}**\n${r.url}\n${r.description}`)
+      .join("\n\n");
+  } catch (err) {
+    return `Search error: ${(err as Error).message}. Answer from your training data instead.`;
+  }
+}
+
+/* ── get_current_datetime ──────────────────────────────────────── */
+
+function getCurrentDatetime(): string {
+  const now = new Date();
+  return [
+    `Date: ${now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
+    `Time: ${now.toLocaleTimeString("en-US")} UTC`,
+    `ISO: ${now.toISOString()}`,
+  ].join("\n");
+}
+
+/* ── save_decision ─────────────────────────────────────────────── */
+
+async function saveDecision(
+  args: Record<string, unknown>,
+  ctx: ToolContext
+): Promise<string> {
+  try {
+    const supabase = getSupabaseServer();
+    const id = `dec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    await supabase.from("decisions").insert({
+      id,
+      user_id: ctx.userId || "anonymous",
+      title: args.title as string,
+      status: "decided",
+      choice: args.choice as string,
+      alternatives: args.alternatives || [],
+      reasoning: (args.reasoning as string) || null,
+      project_id: ctx.projectId || null,
+    });
+
+    return `Decision saved: "${args.title}" — ${args.choice}`;
+  } catch (err) {
+    return `Failed to save decision: ${(err as Error).message}`;
+  }
+}
+
+/* ── list_decisions ────────────────────────────────────────────── */
+
+async function listDecisions(ctx: ToolContext): Promise<string> {
+  try {
+    const supabase = getSupabaseServer();
+    const { data } = await supabase
+      .from("decisions")
+      .select("*")
+      .eq("user_id", ctx.userId || "anonymous")
+      .eq("archived", false)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (!data || data.length === 0) return "No decisions saved yet.";
+
+    return data
+      .map(
+        (d: { title: string; choice?: string; reasoning?: string }) =>
+          `- ${d.title}: ${d.choice || "undecided"}${d.reasoning ? ` (${d.reasoning})` : ""}`
+      )
+      .join("\n");
+  } catch (err) {
+    return `Failed to list decisions: ${(err as Error).message}`;
+  }
+}
