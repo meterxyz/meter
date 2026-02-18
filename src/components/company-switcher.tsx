@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore, Company } from "@/lib/workspace-store";
+import { useMeterStore } from "@/lib/store";
 
 interface CompanySwitcherProps {
   activeCompany: Company | null;
@@ -16,6 +17,9 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
   const companies = useWorkspaceStore((s) => s.companies);
   const createCompany = useWorkspaceStore((s) => s.createCompany);
   const setActiveCompany = useWorkspaceStore((s) => s.setActiveCompany);
+  const addProject = useMeterStore((s) => s.addProject);
+  const setActiveProjectChat = useMeterStore((s) => s.setActiveProject);
+  const chatProjects = useMeterStore((s) => s.projects);
 
   // Close on outside click
   useEffect(() => {
@@ -30,22 +34,47 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const [switchingName, setSwitchingName] = useState<string | null>(null);
+
+  const switchToChatThread = (name: string) => {
+    const threadId = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    // Create thread if it doesn't exist
+    if (!chatProjects.some((p) => p.id === threadId)) {
+      addProject(name);
+    }
+    // Show splash and switch
+    setSwitchingName(name);
+    setActiveProjectChat(threadId);
+    setTimeout(() => setSwitchingName(null), 700);
+  };
+
   const handleSelect = (id: string) => {
+    const company = companies.find((c) => c.id === id);
     setActiveCompany(id);
     setOpen(false);
+    if (company) switchToChatThread(company.name);
   };
 
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    // Single store set — create + activate in one call
     createCompany(name);
+    switchToChatThread(name);
     setNewName("");
     setCreating(false);
     setOpen(false);
   };
 
   return (
+    <>
+    {switchingName && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 backdrop-blur-sm">
+        <div className="rounded-2xl border border-border bg-card px-8 py-6 text-center shadow-xl">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">Switching workspace</p>
+          <p className="mt-2 text-xl text-foreground">{switchingName}</p>
+        </div>
+      </div>
+    )}
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
@@ -117,5 +146,6 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
         </div>
       )}
     </div>
+    </>
   );
 }
