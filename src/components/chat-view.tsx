@@ -412,7 +412,7 @@ export function ChatView() {
             {showThinking && <ThinkingIndicator toolName={activeTool} />}
 
             {/* Scroll anchor */}
-            <div ref={bottomRef} />
+            <div ref={bottomRef} data-scroll-anchor />
           </div>
         </div>
 

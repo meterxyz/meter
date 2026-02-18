@@ -25,6 +25,18 @@ export function ConnectorsBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
+  function handleToggle() {
+    const willOpen = !open;
+    setOpen(willOpen);
+    // When expanding, scroll chat to bottom so it visibly pushes up
+    if (willOpen) {
+      requestAnimationFrame(() => {
+        const anchor = document.querySelector("[data-scroll-anchor]");
+        anchor?.scrollIntoView({ behavior: "smooth" });
+      });
+    }
+  }
+
   function handleConnect(providerId: string) {
     if (!userId) return;
     if (isApiKeyProvider(providerId)) {
@@ -38,8 +50,8 @@ export function ConnectorsBar() {
     <div ref={containerRef}>
       {/* Trigger bar */}
       <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 font-mono text-[10px] text-muted-foreground/50 uppercase tracking-wider hover:text-muted-foreground/80 transition-colors"
+        onClick={handleToggle}
+        className="flex w-full items-center gap-1.5 bg-foreground/[0.03] px-3 py-2 font-mono text-[10px] text-muted-foreground/50 uppercase tracking-wider hover:text-muted-foreground/80 transition-colors"
       >
         <svg
           width="10"
@@ -59,7 +71,7 @@ export function ConnectorsBar() {
 
       {/* Expanded connector list */}
       {open && (
-        <div className="border-t border-border/50 py-0.5">
+        <div className="border-t border-border/50 bg-foreground/[0.03] py-0.5">
           {CONNECTORS.map((connector) => {
             const connected = !!connectedServices[connector.id];
             return (
