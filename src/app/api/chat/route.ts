@@ -180,15 +180,31 @@ export async function POST(req: NextRequest) {
             error: err.error,
           });
 
-          // Broad rate limit detection — check status, code, type, message, and nested error body
+          // Classify the error
           const errorStr = JSON.stringify(err.error ?? "").toLowerCase();
           const msgStr = (err.message ?? "").toLowerCase();
-          const isRateLimit =
+
+          let errorCode = "unknown";
+          if (
             err.status === 429 ||
             err.code === "rate_limit_exceeded" ||
             err.type === "rate_limit_error" ||
-            /rate.?limit|too many request|quota|throttl|capacity|overloaded/i.test(msgStr) ||
-            /rate.?limit|too many request|quota|throttl|capacity|overloaded/i.test(errorStr);
+            /rate.?limit|too many request|throttl/i.test(msgStr) ||
+            /rate.?limit|too many request|throttl/i.test(errorStr)
+          ) {
+            errorCode = "rate_limit";
+          } else if (
+            err.status === 402 ||
+            /credits|insufficient.?funds|payment|afford/i.test(msgStr) ||
+            /credits|insufficient.?funds|payment|afford/i.test(errorStr)
+          ) {
+            errorCode = "insufficient_credits";
+          } else if (
+            /capacity|overloaded|unavailable/i.test(msgStr) ||
+            /capacity|overloaded|unavailable/i.test(errorStr)
+          ) {
+            errorCode = "capacity";
+          }
 
           // Extract retry/reset timing from headers or error body
           let retryAfter: string | null = null;
@@ -200,7 +216,6 @@ export async function POST(req: NextRequest) {
               err.headers.get("x-ratelimit-reset-tokens") ||
               null;
           }
-          // Also check nested error body for reset info
           if (!retryAfter && err.error) {
             const metadata = err.error.metadata as Record<string, unknown> | undefined;
             if (metadata?.retry_after) retryAfter = String(metadata.retry_after);
@@ -212,13 +227,17 @@ export async function POST(req: NextRequest) {
             ? resolvedModel.split("/")[0].charAt(0).toUpperCase() + resolvedModel.split("/")[0].slice(1)
             : null;
 
+          // Extract the clean error message (strip status code prefix)
+          const nestedMsg = err.error?.message as string | undefined;
+          const cleanMessage = nestedMsg || err.message;
+
           send({
             type: "error",
-            code: isRateLimit ? "rate_limit" : "unknown",
+            code: errorCode,
             model: resolvedModel,
             provider,
             retryAfter,
-            message: err.message,
+            message: cleanMessage,
           });
         }
 

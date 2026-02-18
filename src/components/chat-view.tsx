@@ -25,28 +25,28 @@ function ErrorCard({ payload }: { payload: string }) {
   let code = "unknown";
   let model = "";
   let provider = "";
+  let message = "";
   let retryAfter: string | null = null;
   try {
     const parsed = JSON.parse(payload);
     code = parsed.code ?? "unknown";
     model = parsed.model ?? "";
     provider = parsed.provider ?? "";
+    message = parsed.message ?? "";
     retryAfter = parsed.retryAfter ?? null;
   } catch { /* ignore */ }
 
   const modelLabel = model ? shortModelName(model) : "This model";
-  const isRateLimit = code === "rate_limit";
+  const providerLabel = provider || "the provider";
 
   // Format reset time if available
   let resetLabel = "";
   if (retryAfter) {
     const secs = Number(retryAfter);
     if (!isNaN(secs) && secs > 0) {
-      // retry-after is seconds
       const mins = Math.ceil(secs / 60);
       resetLabel = mins <= 1 ? "resets in ~1 minute" : `resets in ~${mins} minutes`;
     } else {
-      // Could be a date string
       const date = new Date(retryAfter);
       if (!isNaN(date.getTime())) {
         const diffMs = date.getTime() - Date.now();
@@ -58,17 +58,33 @@ function ErrorCard({ payload }: { payload: string }) {
     }
   }
 
-  const providerLabel = provider || "the provider";
+  // Build message based on error type
+  let headline: string;
+  let detail: string | null = null;
+
+  if (code === "rate_limit") {
+    headline = `${modelLabel} is being rate-limited by ${providerLabel}${resetLabel ? ` \u2014 ${resetLabel}` : ""}. Switch to Auto to continue the conversation.`;
+  } else if (code === "insufficient_credits") {
+    headline = `${modelLabel} requires more OpenRouter credits than currently available.`;
+    detail = "Add credits at openrouter.ai/settings/credits, or switch to a cheaper model.";
+  } else if (code === "capacity") {
+    headline = `${modelLabel} is temporarily at capacity${providerLabel ? ` on ${providerLabel}` : ""}. Try again shortly or switch models.`;
+  } else {
+    headline = `${modelLabel} returned an error.`;
+    // Show the raw message for unknown errors so the user can see what happened
+    if (message) detail = message;
+  }
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-        <p className="font-mono text-[11px] text-foreground/70">
-          {isRateLimit
-            ? `${modelLabel} is being rate-limited by ${providerLabel}${resetLabel ? ` \u2014 ${resetLabel}` : ""}. Switch to Auto to continue the conversation.`
-            : `Something went wrong with ${modelLabel}. Try again or switch models.`}
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="font-mono text-[11px] text-foreground/70">{headline}</p>
+          {detail && (
+            <p className="font-mono text-[10px] text-muted-foreground/50">{detail}</p>
+          )}
+        </div>
       </div>
       <button
         onClick={() => setSelectedModelId("auto")}
