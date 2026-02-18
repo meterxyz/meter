@@ -105,6 +105,8 @@ interface MeterState {
   settlementHistoryLoading: boolean;
   spendLimits: SpendLimits;
 
+  decisionMode: boolean;
+
   inspectorOpen: boolean;
   inspectorTab: string;
 
@@ -145,6 +147,7 @@ interface MeterState {
   setSpendingCap: (v: number) => void;
   setAutoSettleThreshold: (v: number) => void;
   setIsSettling: (v: boolean) => void;
+  setDecisionMode: (v: boolean) => void;
 
   fetchCards: () => Promise<void>;
   setDefaultCard: (paymentMethodId: string) => Promise<void>;
@@ -242,6 +245,8 @@ export const useMeterStore = create<MeterState>()(
       spendLimits: { dailyLimit: null, monthlyLimit: null, perTxnLimit: null },
 
       pendingInput: null,
+
+      decisionMode: false,
 
       inspectorOpen: false,
       inspectorTab: "usage",
@@ -350,7 +355,7 @@ export const useMeterStore = create<MeterState>()(
       updateLastAssistantMessage: (content, tokensOut) =>
         set((s) => {
           const active = ensureDaily(getActiveProject(s));
-          const pricingModelId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId;
+          const pricingModelId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4.6" : s.selectedModelId;
           const model = getModel(pricingModelId);
           const msgs = [...active.messages];
           const last = msgs[msgs.length - 1];
@@ -379,7 +384,7 @@ export const useMeterStore = create<MeterState>()(
         set((s) => {
           const active = ensureDaily(getActiveProject(s));
           const pricingModelId = actualModel
-            ?? (s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId);
+            ?? (s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4.6" : s.selectedModelId);
           const model = getModel(pricingModelId);
           const inputCost = tokensIn * model.inputPrice;
           const totalMsgCost = inputCost + tokensOut * model.outputPrice;
@@ -412,7 +417,7 @@ export const useMeterStore = create<MeterState>()(
           // updateLastAssistantMessage using the *selected* model's price.
           // When the actual model differs (rerouting), reconcile against what
           // was accumulated, not the final model's rate.
-          const selectedPricingId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId;
+          const selectedPricingId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4.6" : s.selectedModelId;
           const streamingModel = getModel(selectedPricingId);
           const streamedOutputCost = (last?.tokensOut ?? 0) * streamingModel.outputPrice;
           const finalOutputCost = tokensOut * model.outputPrice;
@@ -698,6 +703,7 @@ export const useMeterStore = create<MeterState>()(
       setSpendingCap: (v) => set({ spendingCap: v }),
       setAutoSettleThreshold: (v) => set({ autoSettleThreshold: v }),
       setIsSettling: (v) => set({ isSettling: v }),
+      setDecisionMode: (v) => set({ decisionMode: v }),
 
       reset: () =>
         set((s) => ({

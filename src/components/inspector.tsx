@@ -548,9 +548,16 @@ function PurchasesTab() {
   const updateSpendLimits = useMeterStore((s) => s.updateSpendLimits);
   const userId = useMeterStore((s) => s.userId);
   const getPendingBalance = useMeterStore((s) => s.getPendingBalance);
+  const settleAll = useMeterStore((s) => s.settleAll);
+  const isSettling = useMeterStore((s) => s.isSettling);
+  const settlementError = useMeterStore((s) => s.settlementError);
+  const clearSettlementError = useMeterStore((s) => s.clearSettlementError);
+  const cardLast4 = useMeterStore((s) => s.cardLast4);
+  const cardBrand = useMeterStore((s) => s.cardBrand);
 
   const [addingCard, setAddingCard] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [settleSuccess, setSettleSuccess] = useState(false);
 
   const [dailyInput, setDailyInput] = useState("");
   const [monthlyInput, setMonthlyInput] = useState("");
@@ -611,6 +618,18 @@ function PurchasesTab() {
 
   const canRemoveCards = cards.length > 1 || getPendingBalance() <= 0;
 
+  const pendingBalance = getPendingBalance();
+  const brandLabel = cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : "Card";
+
+  const handleSettle = async () => {
+    if (settlementError) clearSettlementError();
+    const result = await settleAll();
+    if (result.success) {
+      setSettleSuccess(true);
+      setTimeout(() => setSettleSuccess(false), 2000);
+    }
+  };
+
   const saveLimitOnBlur = (field: keyof typeof spendLimits, raw: string) => {
     const val = raw.trim() === "" ? null : Number(raw);
     if (val !== null && isNaN(val)) return;
@@ -619,6 +638,43 @@ function PurchasesTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Settle */}
+      <div className="rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Outstanding</span>
+          <span className="font-mono text-sm font-medium tabular-nums text-foreground">
+            ${pendingBalance.toFixed(2)}
+          </span>
+        </div>
+
+        {settlementError && (
+          <div className="mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
+            <span className="font-mono text-[10px] text-red-400">{settlementError}</span>
+            <p className="mt-0.5 font-mono text-[9px] text-red-400/60">Please update your card or try again.</p>
+          </div>
+        )}
+
+        <button
+          onClick={handleSettle}
+          disabled={isSettling || pendingBalance <= 0}
+          className={`w-full rounded-lg py-2 font-mono text-[11px] transition-colors ${
+            settleSuccess
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : "bg-foreground text-background hover:bg-foreground/90 disabled:opacity-40"
+          }`}
+        >
+          {settleSuccess ? "Settled" : isSettling ? "Processing..." : `Pay & Settle $${pendingBalance.toFixed(2)}`}
+        </button>
+
+        {cardLast4 && pendingBalance > 0 && (
+          <p className="mt-1.5 text-center font-mono text-[9px] text-muted-foreground/40">
+            Charged to {brandLabel} {cardLast4}
+          </p>
+        )}
+      </div>
+
+      <div className="h-px bg-border" />
+
       {/* Payment Cards — Apple Wallet stack */}
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">

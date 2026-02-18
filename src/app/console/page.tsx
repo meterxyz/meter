@@ -72,7 +72,7 @@ export default function ConsolePage() {
   },
   body: JSON.stringify({
     messages: [{ role: "user", content: "Hello" }],
-    model: "anthropic/claude-sonnet-4",
+    model: "anthropic/claude-sonnet-4.6",
   }),
 });
 const reader = response.body.getReader();
@@ -91,7 +91,7 @@ while (true) {
   const curlSnippet = `curl -N https://meterchat.com/api/v1/chat \\
   -H "Authorization: Bearer mk_your_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"messages":[{"role":"user","content":"Hello"}],"model":"anthropic/claude-sonnet-4"}'`;
+  -d '{"messages":[{"role":"user","content":"Hello"}],"model":"anthropic/claude-sonnet-4.6"}'`;
 
   const aiSnippet = `Integrate Meter AI into this app. Use the following API:
 
@@ -99,7 +99,7 @@ POST https://meterchat.com/api/v1/chat
 Authorization: Bearer mk_YOUR_KEY
 Content-Type: application/json
 
-Body: { "messages": [{"role":"user","content":"..."}], "model": "anthropic/claude-sonnet-4" }
+Body: { "messages": [{"role":"user","content":"..."}], "model": "anthropic/claude-sonnet-4.6" }
 Response: SSE stream with JSON lines:
   {"type":"delta","content":"...","tokensOut":N}
   {"type":"usage","tokensIn":N,"tokensOut":N,"confidence":N}

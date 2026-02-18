@@ -42,10 +42,10 @@ interface DirectProvider {
 }
 
 const DIRECT_PROVIDERS: Record<string, DirectProvider> = {
-  "anthropic/claude-sonnet-4": { envKey: "CLAUDE_API_KEY", nativeModel: "claude-sonnet-4-20250514", sdk: "anthropic" },
-  "anthropic/claude-opus-4": { envKey: "CLAUDE_API_KEY", nativeModel: "claude-opus-4-20250514", sdk: "anthropic" },
-  "openai/gpt-4.1": { envKey: "OPENAI_API_KEY", nativeModel: "gpt-4.1", sdk: "openai" },
-  "google/gemini-2.5-pro": { envKey: "GEMINI_API_KEY", nativeModel: "gemini-2.5-pro-preview-05-06", sdk: "gemini" },
+  "anthropic/claude-sonnet-4.6": { envKey: "CLAUDE_API_KEY", nativeModel: "claude-sonnet-4-6", sdk: "anthropic" },
+  "anthropic/claude-opus-4.6": { envKey: "CLAUDE_API_KEY", nativeModel: "claude-opus-4-6", sdk: "anthropic" },
+  "openai/gpt-5.2": { envKey: "OPENAI_API_KEY", nativeModel: "gpt-5.2", sdk: "openai" },
+  "google/gemini-3-pro-preview": { envKey: "GEMINI_API_KEY", nativeModel: "gemini-3-pro-preview", sdk: "gemini" },
 };
 
 /**
@@ -53,9 +53,9 @@ const DIRECT_PROVIDERS: Record<string, DirectProvider> = {
  * try these models in order (skipping the original).
  */
 const AUTO_ROUTE_ORDER = [
-  "anthropic/claude-sonnet-4",
-  "openai/gpt-4.1",
-  "google/gemini-2.5-pro",
+  "anthropic/claude-sonnet-4.6",
+  "openai/gpt-5.2",
+  "google/gemini-3-pro-preview",
 ];
 
 /* ─── Streaming adapters ────────────────────────────────────────── */
