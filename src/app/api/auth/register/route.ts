@@ -117,8 +117,10 @@ export async function POST(req: NextRequest) {
         verification.registrationInfo;
 
       // Store the credential
+      // regCred.id is already Base64URLString in @simplewebauthn/server v11
+      // regCred.publicKey is Uint8Array and needs encoding
       await supabase.from("passkey_credentials").insert({
-        credential_id: Buffer.from(regCred.id).toString("base64url"),
+        credential_id: regCred.id,
         user_id: uid,
         public_key: Buffer.from(regCred.publicKey).toString("base64url"),
         counter: regCred.counter,
