@@ -53,6 +53,7 @@ interface MeterState {
   cardLast4: string | null;
   stripeCustomerId: string | null;
   connectedServices: Record<string, boolean>;
+  connectionsLoading: boolean;
 
   selectedModelId: string;
   spendingCapEnabled: boolean;
@@ -71,6 +72,9 @@ interface MeterState {
   setStripeCustomerId: (id: string) => void;
   connectService: (id: string) => void;
   disconnectService: (id: string) => void;
+  fetchConnectionStatus: () => Promise<void>;
+  disconnectServiceRemote: (id: string) => Promise<void>;
+  submitApiKey: (provider: string, apiKey: string) => Promise<boolean>;
   logout: () => void;
 
   addProject: (name: string) => void;
@@ -149,7 +153,7 @@ const initialProjects = [
 
 export const useMeterStore = create<MeterState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       userId: null,
       email: null,
       authenticated: false,
@@ -157,6 +161,7 @@ export const useMeterStore = create<MeterState>()(
       cardLast4: null,
       stripeCustomerId: null,
       connectedServices: {},
+      connectionsLoading: false,
 
       selectedModelId: DEFAULT_MODEL.id,
       spendingCapEnabled: false,
@@ -177,6 +182,57 @@ export const useMeterStore = create<MeterState>()(
         set((s) => ({ connectedServices: { ...s.connectedServices, [id]: true } })),
       disconnectService: (id) =>
         set((s) => ({ connectedServices: { ...s.connectedServices, [id]: false } })),
+
+      fetchConnectionStatus: async () => {
+        const userId = get().userId;
+        if (!userId) return;
+        set({ connectionsLoading: true });
+        try {
+          const res = await fetch(`/api/oauth/status?userId=${encodeURIComponent(userId)}`);
+          if (res.ok) {
+            const status = await res.json();
+            set({ connectedServices: status });
+          }
+        } catch {
+          // Silently fail — local state remains
+        } finally {
+          set({ connectionsLoading: false });
+        }
+      },
+
+      disconnectServiceRemote: async (id) => {
+        const userId = get().userId;
+        if (!userId) return;
+        set((s) => ({ connectedServices: { ...s.connectedServices, [id]: false } }));
+        try {
+          await fetch(`/api/oauth/${id}/disconnect`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId }),
+          });
+        } catch {
+          // Silently fail
+        }
+      },
+
+      submitApiKey: async (provider, apiKey) => {
+        const userId = get().userId;
+        if (!userId) return false;
+        try {
+          const res = await fetch("/api/oauth/api-key", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, provider, apiKey }),
+          });
+          if (res.ok) {
+            set((s) => ({ connectedServices: { ...s.connectedServices, [provider]: true } }));
+            return true;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      },
 
       logout: () =>
         set({
