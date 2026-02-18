@@ -146,6 +146,30 @@ create table if not exists usage_records (
 );
 
 -- =============================================
+-- SETTLEMENT HISTORY
+-- =============================================
+
+create table if not exists settlement_history (
+  id text primary key,
+  user_id text not null references meter_users(id) on delete cascade,
+  amount numeric not null,
+  stripe_payment_intent_id text,
+  tx_hash text,
+  message_count integer default 0,
+  charge_count integer default 0,
+  card_last4 text,
+  card_brand text,
+  status text not null default 'succeeded',
+  created_at timestamptz default now()
+);
+
+-- Spend limit columns on meter_users
+-- (Run these as ALTER TABLE if table already exists)
+-- alter table meter_users add column if not exists daily_limit numeric;
+-- alter table meter_users add column if not exists monthly_limit numeric;
+-- alter table meter_users add column if not exists per_txn_limit numeric;
+
+-- =============================================
 -- INDEXES
 -- =============================================
 
@@ -158,3 +182,4 @@ create index if not exists idx_chat_sessions_user on chat_sessions(user_id);
 create index if not exists idx_workspaces_user on workspaces(user_id);
 create index if not exists idx_workspace_projects_workspace on workspace_projects(workspace_id);
 create index if not exists idx_decisions_user on decisions(user_id);
+create index if not exists idx_settlement_history_user on settlement_history(user_id);

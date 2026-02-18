@@ -31,6 +31,34 @@ export interface ChatMessage {
   cards?: ActionCard[];
 }
 
+export interface PaymentCard {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  isDefault: boolean;
+}
+
+export interface SettlementRecord {
+  id: string;
+  amount: number;
+  stripePaymentIntentId?: string;
+  txHash?: string;
+  messageCount: number;
+  chargeCount: number;
+  cardLast4?: string;
+  cardBrand?: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface SpendLimits {
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  perTxnLimit: number | null;
+}
+
 interface ProjectThread {
   id: string;
   name: string;
@@ -70,6 +98,12 @@ interface MeterState {
   chatBlocked: boolean;
 
   pendingInput: string | null;
+
+  cards: PaymentCard[];
+  cardsLoading: boolean;
+  settlementHistory: SettlementRecord[];
+  settlementHistoryLoading: boolean;
+  spendLimits: SpendLimits;
 
   inspectorOpen: boolean;
   inspectorTab: string;
@@ -111,6 +145,15 @@ interface MeterState {
   setSpendingCap: (v: number) => void;
   setAutoSettleThreshold: (v: number) => void;
   setIsSettling: (v: boolean) => void;
+
+  fetchCards: () => Promise<void>;
+  setDefaultCard: (paymentMethodId: string) => Promise<void>;
+  removeCard: (paymentMethodId: string) => Promise<{ success: boolean; error?: string }>;
+
+  fetchSettlementHistory: () => Promise<void>;
+
+  fetchSpendLimits: () => Promise<void>;
+  updateSpendLimits: (limits: Partial<SpendLimits>) => Promise<void>;
 
   reset: () => void;
 }
@@ -191,6 +234,12 @@ export const useMeterStore = create<MeterState>()(
       isSettling: false,
       settlementError: null,
       chatBlocked: false,
+
+      cards: [],
+      cardsLoading: false,
+      settlementHistory: [],
+      settlementHistoryLoading: false,
+      spendLimits: { dailyLimit: null, monthlyLimit: null, perTxnLimit: null },
 
       pendingInput: null,
 
@@ -540,6 +589,101 @@ export const useMeterStore = create<MeterState>()(
         }),
 
       clearSettlementError: () => set({ settlementError: null }),
+
+      fetchCards: async () => {
+        const userId = get().userId;
+        if (!userId) return;
+        set({ cardsLoading: true });
+        try {
+          const res = await fetch(`/api/billing/cards?userId=${encodeURIComponent(userId)}`);
+          if (res.ok) {
+            const data = await res.json();
+            set({ cards: data.cards ?? [] });
+          }
+        } catch { /* silent */ } finally {
+          set({ cardsLoading: false });
+        }
+      },
+
+      setDefaultCard: async (paymentMethodId) => {
+        const userId = get().userId;
+        if (!userId) return;
+        try {
+          const res = await fetch("/api/billing/cards/default", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, paymentMethodId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            set((s) => ({
+              cards: s.cards.map((c) => ({ ...c, isDefault: c.id === paymentMethodId })),
+              cardLast4: data.cardLast4,
+              cardBrand: data.cardBrand,
+            }));
+          }
+        } catch { /* silent */ }
+      },
+
+      removeCard: async (paymentMethodId) => {
+        const userId = get().userId;
+        if (!userId) return { success: false, error: "Not authenticated" };
+        try {
+          const res = await fetch(`/api/billing/cards/${paymentMethodId}?userId=${encodeURIComponent(userId)}`, {
+            method: "DELETE",
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: "Failed to remove card" }));
+            return { success: false, error: body.error };
+          }
+          set((s) => ({ cards: s.cards.filter((c) => c.id !== paymentMethodId) }));
+          await get().fetchCards();
+          return { success: true };
+        } catch {
+          return { success: false, error: "Failed to remove card" };
+        }
+      },
+
+      fetchSettlementHistory: async () => {
+        const userId = get().userId;
+        if (!userId) return;
+        set({ settlementHistoryLoading: true });
+        try {
+          const res = await fetch(`/api/billing/history?userId=${encodeURIComponent(userId)}`);
+          if (res.ok) {
+            const data = await res.json();
+            set({ settlementHistory: data.history ?? [] });
+          }
+        } catch { /* silent */ } finally {
+          set({ settlementHistoryLoading: false });
+        }
+      },
+
+      fetchSpendLimits: async () => {
+        const userId = get().userId;
+        if (!userId) return;
+        try {
+          const res = await fetch(`/api/billing/spend-limits?userId=${encodeURIComponent(userId)}`);
+          if (res.ok) {
+            const data = await res.json();
+            set({ spendLimits: { dailyLimit: data.dailyLimit ?? null, monthlyLimit: data.monthlyLimit ?? null, perTxnLimit: data.perTxnLimit ?? null } });
+          }
+        } catch { /* silent */ }
+      },
+
+      updateSpendLimits: async (limits) => {
+        const userId = get().userId;
+        if (!userId) return;
+        const merged = { ...get().spendLimits, ...limits };
+        set({ spendLimits: merged });
+        try {
+          await fetch("/api/billing/spend-limits", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, ...merged }),
+          });
+        } catch { /* silent */ }
+      },
 
       setPendingInput: (v) => set({ pendingInput: v }),
 

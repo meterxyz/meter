@@ -34,7 +34,7 @@ export function CardSwitcher({ cardLast4 }: CardSwitcherProps) {
           <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
           <line x1="1" y1="10" x2="23" y2="10" />
         </svg>
-        <span>•••• {cardLast4}</span>
+        <span>{cardLast4}</span>
         <svg
           width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -52,7 +52,7 @@ export function CardSwitcher({ cardLast4 }: CardSwitcherProps) {
           {/* Active billing card */}
           <div className="flex w-full items-center gap-2 rounded-md bg-foreground/10 px-2 py-1.5 font-mono text-[11px] text-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            •••• {cardLast4}
+            {cardLast4}
             <span className="ml-auto text-[10px] text-muted-foreground/60">Billing</span>
           </div>
           {/* Future: payment cards, agent virtual cards */}

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/tools";
 import { streamWithFallback, type Send } from "@/lib/fallback";
+import { getSupabaseServer } from "@/lib/supabase";
 import type OpenAI from "openai";
 
 type Message = OpenAI.Chat.ChatCompletionMessageParam;
@@ -18,6 +19,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const { messages, model, userId, projectId, connectedServices } = await req.json();
+
+    // Server-side spend limit enforcement
+    if (userId) {
+      const limitCheck = await checkSpendLimits(userId);
+      if (limitCheck) {
+        return new Response(
+          JSON.stringify({ error: limitCheck }),
+          { status: 429, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const connectedIds: string[] = Array.isArray(connectedServices) ? connectedServices : [];
     const resolvedModel = !model || model === "auto" ? "anthropic/claude-sonnet-4" : model;
     const encoder = new TextEncoder();
@@ -138,4 +151,45 @@ export async function POST(req: NextRequest) {
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+async function checkSpendLimits(userId: string): Promise<string | null> {
+  try {
+    const supabase = getSupabaseServer();
+    const { data: user } = await supabase
+      .from("meter_users")
+      .select("daily_limit, monthly_limit")
+      .eq("id", userId)
+      .single();
+
+    if (!user) return null;
+    const dailyLimit = user.daily_limit != null ? Number(user.daily_limit) : null;
+    const monthlyLimit = user.monthly_limit != null ? Number(user.monthly_limit) : null;
+    if (dailyLimit === null && monthlyLimit === null) return null;
+
+    const { data: sessions } = await supabase
+      .from("chat_sessions")
+      .select("today_cost, total_cost")
+      .eq("user_id", userId);
+
+    if (!sessions || sessions.length === 0) return null;
+
+    if (dailyLimit !== null) {
+      const todayCost = sessions.reduce((s: number, sess: { today_cost: number }) => s + (Number(sess.today_cost) || 0), 0);
+      if (todayCost >= dailyLimit) {
+        return `Daily spend limit reached ($${todayCost.toFixed(2)} / $${dailyLimit.toFixed(2)})`;
+      }
+    }
+
+    if (monthlyLimit !== null) {
+      const totalCost = sessions.reduce((s: number, sess: { total_cost: number }) => s + (Number(sess.total_cost) || 0), 0);
+      if (totalCost >= monthlyLimit) {
+        return `Monthly spend limit reached ($${totalCost.toFixed(2)} / $${monthlyLimit.toFixed(2)})`;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }

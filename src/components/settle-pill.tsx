@@ -158,7 +158,7 @@ export function SettlePill() {
                     </div>
                     {item.type === "card" && (
                       <div className="mt-1 font-mono text-[9px] text-muted-foreground/50">
-                        Paid{item.paidAt ? ` on ${new Date(item.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""} with Virtual Card{cardLast4 ? ` ····${cardLast4}` : ""}
+                        Paid{item.paidAt ? ` on ${new Date(item.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""} with Virtual Card{cardLast4 ? ` ${cardLast4}` : ""}
                       </div>
                     )}
                   </div>
@@ -202,7 +202,7 @@ export function SettlePill() {
 
             {cardLast4 && (
               <div className="text-center font-mono text-[9px] text-muted-foreground/40">
-                Charged to {brandLabel} ····{cardLast4}
+                Charged to {brandLabel} {cardLast4}
               </div>
             )}
           </div>
