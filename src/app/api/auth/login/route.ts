@@ -7,7 +7,12 @@ import {
 import crypto from "crypto";
 
 const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "meter.chat";
-const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
+const BASE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
+const EXPECTED_ORIGINS = [
+  BASE_ORIGIN,
+  BASE_ORIGIN.replace("://", "://www."),
+  BASE_ORIGIN.replace("://www.", "://"),
+].filter((v, i, a) => a.indexOf(v) === i);
 
 // POST /api/auth/login — start or verify passkey login
 export async function POST(req: NextRequest) {
@@ -96,7 +101,7 @@ export async function POST(req: NextRequest) {
       const verification = await verifyAuthenticationResponse({
         response: credential,
         expectedChallenge: challengeRecord.challenge,
-        expectedOrigin: ORIGIN,
+        expectedOrigin: EXPECTED_ORIGINS,
         expectedRPID: RP_ID,
         credential: {
           id: storedCred.credential_id,
