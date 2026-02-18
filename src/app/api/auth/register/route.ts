@@ -124,7 +124,9 @@ export async function POST(req: NextRequest) {
         counter: regCred.counter,
         device_type: credentialDeviceType,
         backed_up: credentialBackedUp,
-        transports: credential.response?.transports ?? [],
+        transports: (credential.response?.transports?.length
+          ? credential.response.transports
+          : ["internal", "hybrid"]),
       });
 
       // Clean up challenge
