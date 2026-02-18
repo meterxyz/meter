@@ -51,7 +51,11 @@ export async function POST(req: NextRequest) {
       customerId,
     });
   } catch (err) {
-    console.error("Setup intent error:", err);
-    return NextResponse.json({ error: "Failed to create setup intent" }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Setup intent error:", message);
+    return NextResponse.json(
+      { error: message.includes("relation") ? "Database tables not set up. Visit /api/setup-db first." : message },
+      { status: 500 }
+    );
   }
 }
