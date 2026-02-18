@@ -20,7 +20,9 @@ export function AuthorizeScreen() {
       setStatus("Verifying card...");
       // Production: POST /api/billing/setup-intent → Stripe SetupIntent → confirm → save PaymentMethod
       await new Promise((r) => setTimeout(r, 1200));
-      setCardOnFile(true);
+      const digits = cardNumber.replace(/\s/g, "");
+      const last4 = digits.slice(-4);
+      setCardOnFile(true, last4);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus(`Error: ${msg}`);

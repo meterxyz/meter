@@ -9,7 +9,7 @@ export function DecisionsBar() {
   return (
     <button
       onClick={togglePanel}
-      className="flex w-full items-center justify-between px-3 py-2 hover:bg-foreground/[0.03] transition-colors"
+      className="flex w-full items-center justify-between bg-background px-3 py-2 hover:bg-foreground/[0.03] transition-colors"
     >
       <div className="flex items-center gap-1.5">
         <span className="font-mono text-[11px] text-muted-foreground">Decisions</span>
