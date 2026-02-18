@@ -51,6 +51,7 @@ interface MeterState {
   authenticated: boolean;
   cardOnFile: boolean;
   cardLast4: string | null;
+  cardBrand: string | null;
   stripeCustomerId: string | null;
   connectedServices: Record<string, boolean>;
   connectionsLoading: boolean;
@@ -62,7 +63,9 @@ interface MeterState {
   projects: ProjectThread[];
   activeProjectId: string;
 
-  pendingCharges: { id: string; title: string; cost: number }[];
+  pendingCharges: { id: string; title: string; cost: number; type: "usage" | "card" }[];
+  autoSettleThreshold: number;
+  isSettling: boolean;
 
   pendingInput: string | null;
 
@@ -70,7 +73,7 @@ interface MeterState {
   inspectorTab: string;
 
   setAuth: (userId: string, email: string) => void;
-  setCardOnFile: (v: boolean, last4?: string) => void;
+  setCardOnFile: (v: boolean, last4?: string, brand?: string) => void;
   setStripeCustomerId: (id: string) => void;
   connectService: (id: string) => void;
   disconnectService: (id: string) => void;
@@ -87,6 +90,9 @@ interface MeterState {
   finalizeResponse: (tokensIn: number, tokensOut: number, confidence: number) => void;
   setStreaming: (v: boolean) => void;
   markSettled: (messageId: string) => void;
+  settleAll: () => Promise<void>;
+  getPendingBalance: () => number;
+  getUnsettledMessages: () => ChatMessage[];
 
   approveCard: (messageId: string, cardId: string) => void;
   rejectCard: (messageId: string, cardId: string) => void;
@@ -100,6 +106,8 @@ interface MeterState {
   setSelectedModelId: (id: string) => void;
   setSpendingCapEnabled: (v: boolean) => void;
   setSpendingCap: (v: number) => void;
+  setAutoSettleThreshold: (v: number) => void;
+  setIsSettling: (v: boolean) => void;
 
   reset: () => void;
 }
@@ -163,6 +171,7 @@ export const useMeterStore = create<MeterState>()(
       authenticated: false,
       cardOnFile: false,
       cardLast4: null,
+      cardBrand: null,
       stripeCustomerId: null,
       connectedServices: {},
       connectionsLoading: false,
@@ -175,6 +184,8 @@ export const useMeterStore = create<MeterState>()(
       activeProjectId: "meter",
 
       pendingCharges: [],
+      autoSettleThreshold: 10,
+      isSettling: false,
 
       pendingInput: null,
 
@@ -182,7 +193,7 @@ export const useMeterStore = create<MeterState>()(
       inspectorTab: "usage",
 
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
-      setCardOnFile: (v, last4) => set({ cardOnFile: v, cardLast4: last4 ?? null }),
+      setCardOnFile: (v, last4, brand) => set({ cardOnFile: v, cardLast4: last4 ?? null, cardBrand: brand ?? null }),
       setStripeCustomerId: (id) => set({ stripeCustomerId: id }),
       connectService: (id) =>
         set((s) => ({ connectedServices: { ...s.connectedServices, [id]: true } })),
@@ -247,12 +258,14 @@ export const useMeterStore = create<MeterState>()(
           authenticated: false,
           cardOnFile: false,
           cardLast4: null,
+          cardBrand: null,
           stripeCustomerId: null,
           connectedServices: {},
           projects: initialProjects,
           activeProjectId: "meter",
           inspectorOpen: false,
           pendingCharges: [],
+          isSettling: false,
         }),
 
       addProject: (name) =>
@@ -304,7 +317,7 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, updated) };
         }),
 
-      finalizeResponse: (tokensIn, tokensOut, confidence) =>
+      finalizeResponse: (tokensIn, tokensOut, confidence) => {
         set((s) => {
           const active = ensureDaily(getActiveProject(s));
           const pricingModelId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4" : s.selectedModelId;
@@ -347,7 +360,12 @@ export const useMeterStore = create<MeterState>()(
           };
 
           return { projects: replaceActiveProject(s, updated) };
-        }),
+        });
+        const afterState = get();
+        if (afterState.getPendingBalance() >= afterState.autoSettleThreshold) {
+          afterState.settleAll();
+        }
+      },
 
       markSettled: (messageId) =>
         set((s) => {
@@ -368,7 +386,79 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, updated) };
         }),
 
-      approveCard: (messageId, cardId) =>
+      getPendingBalance: () => {
+        const s = get();
+        const msgCost = s.projects
+          .flatMap((p) => p.messages)
+          .filter((m) => m.role === "assistant" && m.cost && !m.settled)
+          .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+        const cardCost = s.pendingCharges.reduce((sum, c) => sum + c.cost, 0);
+        return msgCost + cardCost;
+      },
+
+      getUnsettledMessages: () => {
+        const s = get();
+        return s.projects
+          .flatMap((p) => p.messages)
+          .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled);
+      },
+
+      settleAll: async () => {
+        const s = get();
+        if (s.isSettling) return;
+        set({ isSettling: true });
+
+        const unsettledMsgs = s.projects
+          .flatMap((p) => p.messages)
+          .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled);
+        const messageIds = unsettledMsgs.map((m) => m.id);
+        const chargeIds = s.pendingCharges.map((c) => c.id);
+        const amount = s.getPendingBalance();
+
+        if (amount <= 0) {
+          set({ isSettling: false });
+          return;
+        }
+
+        try {
+          const res = await fetch("/api/billing/settle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: s.userId,
+              stripeCustomerId: s.stripeCustomerId,
+              amount,
+              messageIds,
+              chargeIds,
+            }),
+          });
+
+          if (!res.ok) throw new Error("Settlement failed");
+          const data = await res.json();
+          const batchTxHash = data.txHash as string | undefined;
+
+          set((prev) => {
+            const projects = prev.projects.map((p) => ({
+              ...p,
+              messages: p.messages.map((m) =>
+                messageIds.includes(m.id)
+                  ? {
+                      ...m,
+                      settled: true,
+                      receiptStatus: "settled" as const,
+                      txHash: batchTxHash ?? `0x${shortHex()}${shortHex()}${shortHex()}${shortHex()}`,
+                    }
+                  : m
+              ),
+            }));
+            return { projects, pendingCharges: [], isSettling: false };
+          });
+        } catch {
+          set({ isSettling: false });
+        }
+      },
+
+      approveCard: (messageId, cardId) => {
         set((s) => {
           const active = getActiveProject(s);
           const updated = {
@@ -384,10 +474,15 @@ export const useMeterStore = create<MeterState>()(
           const card = active.messages.find((m) => m.id === messageId)?.cards?.find((c) => c.id === cardId);
           const newCharge =
             card && card.cost
-              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost }]
+              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost, type: "card" as const }]
               : s.pendingCharges;
           return { projects: replaceActiveProject(s, updated), pendingCharges: newCharge };
-        }),
+        });
+        const afterState = get();
+        if (afterState.getPendingBalance() >= afterState.autoSettleThreshold) {
+          afterState.settleAll();
+        }
+      },
 
       rejectCard: (messageId, cardId) =>
         set((s) => {
@@ -420,11 +515,14 @@ export const useMeterStore = create<MeterState>()(
       setSelectedModelId: (id) => set({ selectedModelId: id }),
       setSpendingCapEnabled: (v) => set({ spendingCapEnabled: v }),
       setSpendingCap: (v) => set({ spendingCap: v }),
+      setAutoSettleThreshold: (v) => set({ autoSettleThreshold: v }),
+      setIsSettling: (v) => set({ isSettling: v }),
 
       reset: () =>
         set((s) => ({
           projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false })),
           pendingCharges: [],
+          isSettling: false,
         })),
     }),
     {
@@ -436,11 +534,13 @@ export const useMeterStore = create<MeterState>()(
         authenticated: s.authenticated,
         cardOnFile: s.cardOnFile,
         cardLast4: s.cardLast4,
+        cardBrand: s.cardBrand,
         stripeCustomerId: s.stripeCustomerId,
         connectedServices: s.connectedServices,
         selectedModelId: s.selectedModelId,
         spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,
+        autoSettleThreshold: s.autoSettleThreshold,
         projects: s.projects,
         activeProjectId: s.activeProjectId,
       }),

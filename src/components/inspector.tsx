@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { useDecisionsStore, Decision } from "@/lib/decisions-store";
 
@@ -67,14 +67,8 @@ export function Inspector() {
         <div className="flex-1 overflow-y-auto p-4">
           {inspectorTab === "usage" && (
             <UsageTab
-              todayCost={activeProject?.todayCost ?? 0}
-              todayTokensIn={activeProject?.todayTokensIn ?? 0}
-              todayTokensOut={activeProject?.todayTokensOut ?? 0}
-              todayMessageCount={activeProject?.todayMessageCount ?? 0}
-              todayByModel={activeProject?.todayByModel ?? {}}
-              spendingCap={spendingCap}
-              spendingCapEnabled={spendingCapEnabled}
-              messages={activeProject?.messages ?? []}
+              activeProject={activeProject}
+              allProjects={projects}
               email={email}
             />
           )}
@@ -115,87 +109,130 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 /* ─── USAGE TAB ─── */
-function UsageTab({
-  todayCost,
-  todayTokensIn,
-  todayTokensOut,
-  todayMessageCount,
-  todayByModel,
-  spendingCap,
-  spendingCapEnabled,
-  messages,
-  email,
-}: {
+interface ProjectLike {
+  messages: ChatMessage[];
   todayCost: number;
   todayTokensIn: number;
   todayTokensOut: number;
   todayMessageCount: number;
   todayByModel: Record<string, { cost: number; count: number }>;
-  spendingCap: number;
-  spendingCapEnabled: boolean;
-  messages: ChatMessage[];
+  totalCost: number;
+}
+
+function UsageTab({
+  activeProject,
+  allProjects,
+  email,
+}: {
+  activeProject: ProjectLike | undefined;
+  allProjects: ProjectLike[];
   email: string | null;
 }) {
-  const settledCount = messages.filter((m) => m.role === "assistant" && m.settled).length;
-  const pendingCount = messages.filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled).length;
+  const cardLast4 = useMeterStore((s) => s.cardLast4);
+  const cardBrand = useMeterStore((s) => s.cardBrand);
+
+  const allMessages = allProjects.flatMap((p) => p.messages);
+  const assistantMsgs = allMessages.filter((m) => m.role === "assistant" && m.cost !== undefined);
+
+  const totalCost = allProjects.reduce((sum, p) => sum + p.totalCost, 0);
+
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const weekAgo = now - 7 * dayMs;
+    const monthAgo = now - 30 * dayMs;
+
+    const today = activeProject?.todayCost ?? 0;
+    const week = assistantMsgs
+      .filter((m) => m.timestamp >= weekAgo)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const month = assistantMsgs
+      .filter((m) => m.timestamp >= monthAgo)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+
+    const totalTokensIn = assistantMsgs.reduce((sum, m) => sum + (m.tokensIn ?? 0), 0);
+    const totalTokensOut = assistantMsgs.reduce((sum, m) => sum + (m.tokensOut ?? 0), 0);
+    const totalMessages = assistantMsgs.length;
+    const settledCount = assistantMsgs.filter((m) => m.settled).length;
+    const pendingCount = assistantMsgs.filter((m) => !m.settled).length;
+
+    const byModel: Record<string, { cost: number; count: number }> = {};
+    for (const m of assistantMsgs) {
+      const key = m.model ?? "unknown";
+      const existing = byModel[key] || { cost: 0, count: 0 };
+      byModel[key] = { cost: existing.cost + (m.cost ?? 0), count: existing.count + 1 };
+    }
+
+    return { today, week, month, totalTokensIn, totalTokensOut, totalMessages, settledCount, pendingCount, byModel };
+  }, [activeProject, assistantMsgs]);
+
+  const brandLabel = cardBrand
+    ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1)
+    : "Card";
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Today's spend */}
+      {/* Lifetime spend */}
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Today
+          Total Spend
         </div>
-        <div className="flex items-baseline gap-2 mb-2">
-          <span className="font-mono text-2xl text-foreground">${todayCost.toFixed(2)}</span>
-          {spendingCapEnabled && (
-            <span className="font-mono text-[10px] text-muted-foreground/40">
-              of ${spendingCap.toFixed(0)} cap
-            </span>
-          )}
+        <div className="flex items-baseline gap-2 mb-3">
+          <span className="font-mono text-2xl text-foreground">${totalCost.toFixed(2)}</span>
         </div>
-        <div className="h-1 w-full rounded-full bg-border overflow-hidden">
-          <div
-            className="h-full rounded-full bg-foreground/40 transition-all duration-300"
-            style={{ width: `${Math.min(100, (todayCost / Math.max(spendingCap, 1)) * 100)}%` }}
-          />
+        <div className="space-y-1 font-mono text-[11px]">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground/60">Today</span>
+            <span className="text-foreground/70">${stats.today.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground/60">This week</span>
+            <span className="text-foreground/70">${stats.week.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground/60">This month</span>
+            <span className="text-foreground/70">${stats.month.toFixed(2)}</span>
+          </div>
         </div>
       </div>
 
       <div className="h-px bg-border" />
 
-      {/* Stats */}
+      {/* Lifetime activity */}
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Activity
         </div>
-        <StatRow label="Messages" value={todayMessageCount.toString()} />
-        <StatRow label="Tokens In" value={todayTokensIn.toLocaleString()} />
-        <StatRow label="Tokens Out" value={todayTokensOut.toLocaleString()} />
-        <StatRow label="Settled" value={settledCount.toString()} />
-        <StatRow label="Pending" value={pendingCount.toString()} />
+        <StatRow label="Messages" value={stats.totalMessages.toString()} />
+        <StatRow label="Tokens In" value={stats.totalTokensIn.toLocaleString()} />
+        <StatRow label="Tokens Out" value={stats.totalTokensOut.toLocaleString()} />
+        <StatRow label="Settled" value={stats.settledCount.toString()} />
+        <StatRow label="Pending" value={stats.pendingCount.toString()} />
       </div>
 
       <div className="h-px bg-border" />
 
-      {/* By model */}
-      {Object.keys(todayByModel).length > 0 && (
-        <div>
-          <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-            By Model
-          </div>
-          {Object.entries(todayByModel).map(([model, data]) => (
-            <div key={model} className="flex items-center justify-between py-1.5">
-              <span className="text-xs text-muted-foreground">{model}</span>
-              <span className="text-xs text-foreground font-mono">
-                ${data.cost.toFixed(2)} &middot; {data.count} msgs
-              </span>
+      {/* By model — lifetime */}
+      {Object.keys(stats.byModel).length > 0 && (
+        <>
+          <div>
+            <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+              By Model
             </div>
-          ))}
-        </div>
+            {Object.entries(stats.byModel).map(([model, data]) => (
+              <div key={model} className="flex items-center justify-between py-1.5">
+                <span className="text-xs text-muted-foreground">{model}</span>
+                <span className="text-xs text-foreground font-mono">
+                  ${data.cost.toFixed(2)} &middot; {data.count} msgs
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="h-px bg-border" />
+        </>
       )}
 
-      <div className="h-px bg-border" />
+      {/* Payment method */}
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Payment Method
@@ -208,7 +245,9 @@ function UsageTab({
             </svg>
           </div>
           <div>
-            <span className="text-xs text-foreground font-mono">&bull;&bull;&bull;&bull; 4242</span>
+            <span className="text-xs text-foreground font-mono">
+              {cardLast4 ? `${brandLabel} ····${cardLast4}` : "····4242"}
+            </span>
             <span className="block text-[10px] text-muted-foreground/50">{email ?? "account"}</span>
           </div>
         </div>
