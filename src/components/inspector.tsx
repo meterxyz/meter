@@ -67,7 +67,6 @@ export function Inspector() {
         <div className="flex-1 overflow-y-auto p-4">
           {inspectorTab === "usage" && (
             <UsageTab
-              activeProject={activeProject}
               allProjects={projects}
               email={email}
             />
@@ -120,11 +119,9 @@ interface ProjectLike {
 }
 
 function UsageTab({
-  activeProject,
   allProjects,
   email,
 }: {
-  activeProject: ProjectLike | undefined;
   allProjects: ProjectLike[];
   email: string | null;
 }) {
@@ -139,10 +136,13 @@ function UsageTab({
   const stats = useMemo(() => {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
+    const startOfDay = now - (now % dayMs);
     const weekAgo = now - 7 * dayMs;
     const monthAgo = now - 30 * dayMs;
 
-    const today = activeProject?.todayCost ?? 0;
+    const today = assistantMsgs
+      .filter((m) => m.timestamp >= startOfDay)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const week = assistantMsgs
       .filter((m) => m.timestamp >= weekAgo)
       .reduce((sum, m) => sum + (m.cost ?? 0), 0);
@@ -164,7 +164,7 @@ function UsageTab({
     }
 
     return { today, week, month, totalTokensIn, totalTokensOut, totalMessages, settledCount, pendingCount, byModel };
-  }, [activeProject, assistantMsgs]);
+  }, [assistantMsgs]);
 
   const brandLabel = cardBrand
     ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1)

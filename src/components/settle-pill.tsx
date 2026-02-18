@@ -19,7 +19,7 @@ export function SettlePill() {
   const pendingBalance = useMemo(() => {
     const msgCost = projects
       .flatMap((p) => p.messages)
-      .filter((m) => m.role === "assistant" && m.cost && !m.settled)
+      .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled)
       .reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const cardCost = pendingCharges.reduce((sum, c) => sum + c.cost, 0);
     return msgCost + cardCost;

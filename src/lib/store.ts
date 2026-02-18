@@ -349,14 +349,22 @@ export const useMeterStore = create<MeterState>()(
             count: existing.count + 1,
           };
 
+          // Output costs are incrementally added during streaming by
+          // updateLastAssistantMessage. Reconcile any difference between
+          // the streamed token count and the authoritative final count,
+          // then add input costs (which aren't tracked during streaming).
+          const streamedOutputCost = (last?.tokensOut ?? 0) * model.outputPrice;
+          const finalOutputCost = tokensOut * model.outputPrice;
+          const costDelta = inputCost + (finalOutputCost - streamedOutputCost);
+
           const updated = {
             ...active,
             messages: msgs,
             todayTokensIn: active.todayTokensIn + tokensIn,
             todayMessageCount: active.todayMessageCount + 1,
             todayByModel: byModel,
-            todayCost: active.todayCost + inputCost,
-            totalCost: active.totalCost + inputCost,
+            todayCost: active.todayCost + costDelta,
+            totalCost: active.totalCost + costDelta,
           };
 
           return { projects: replaceActiveProject(s, updated) };
@@ -390,7 +398,7 @@ export const useMeterStore = create<MeterState>()(
         const s = get();
         const msgCost = s.projects
           .flatMap((p) => p.messages)
-          .filter((m) => m.role === "assistant" && m.cost && !m.settled)
+          .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled)
           .reduce((sum, m) => sum + (m.cost ?? 0), 0);
         const cardCost = s.pendingCharges.reduce((sum, c) => sum + c.cost, 0);
         return msgCost + cardCost;
