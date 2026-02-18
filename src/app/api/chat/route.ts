@@ -164,7 +164,17 @@ export async function POST(req: NextRequest) {
             // Loop continues — model will see tool results and respond
           }
         } catch (streamErr) {
-          send({ type: "error", message: (streamErr as Error).message });
+          const err = streamErr as Error & { status?: number; code?: string };
+          const isRateLimit =
+            err.status === 429 ||
+            err.code === "rate_limit_exceeded" ||
+            /rate.?limit/i.test(err.message);
+          send({
+            type: "error",
+            code: isRateLimit ? "rate_limit" : "unknown",
+            model: resolvedModel,
+            message: err.message,
+          });
         }
 
         send({ type: "done" });

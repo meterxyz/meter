@@ -20,6 +20,41 @@ function statusLabel(msg: ChatMessage) {
   return "Signing";
 }
 
+function ErrorCard({ payload }: { payload: string }) {
+  const setSelectedModelId = useMeterStore((s) => s.setSelectedModelId);
+  let code = "unknown";
+  let model = "";
+  try {
+    const parsed = JSON.parse(payload);
+    code = parsed.code ?? "unknown";
+    model = parsed.model ?? "";
+  } catch { /* ignore */ }
+
+  const modelLabel = model ? shortModelName(model) : "this model";
+  const isRateLimit = code === "rate_limit";
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+        <p className="font-mono text-[11px] text-foreground/70">
+          {isRateLimit
+            ? `${modelLabel} is temporarily rate-limited. Switch to another model or try again shortly.`
+            : `Something went wrong with ${modelLabel}. Try again or switch models.`}
+        </p>
+      </div>
+      {isRateLimit && (
+        <button
+          onClick={() => setSelectedModelId("auto")}
+          className="self-start rounded-md bg-foreground/10 px-3 py-1 font-mono text-[11px] text-foreground/80 hover:bg-foreground/15 transition-colors"
+        >
+          Switch to Auto
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string }) {
   const hasCost = msg.cost !== undefined;
 
@@ -329,6 +364,14 @@ export function ChatView() {
                   reasoning: d.reasoning ?? undefined,
                 });
               }
+            } else if (data.type === "error") {
+              const errorPayload = JSON.stringify({
+                code: data.code,
+                model: data.model,
+                message: data.message,
+              });
+              fullContent = `__error__${errorPayload}`;
+              updateLastAssistantMessage(fullContent, 0);
             } else if (data.type === "usage") {
               finalUsage = {
                 tokensIn: data.tokensIn,
@@ -439,7 +482,9 @@ export function ChatView() {
               <div key={msg.id} className="mb-4">
                 <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
-                    {msg.role === "assistant" ? (
+                    {msg.role === "assistant" && msg.content.startsWith("__error__") ? (
+                      <ErrorCard payload={msg.content.slice("__error__".length)} />
+                    ) : msg.role === "assistant" ? (
                       <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-a:text-blue-400">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
