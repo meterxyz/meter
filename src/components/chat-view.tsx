@@ -149,6 +149,11 @@ export function ChatView() {
   const isNearBottomRef = useRef(true);
   const hasInitialScrolled = useRef(false);
 
+  // Reset instant-scroll flag when switching projects so we don't animate through history
+  useEffect(() => {
+    hasInitialScrolled.current = false;
+  }, [activeProjectId]);
+
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
 
