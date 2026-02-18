@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
         rpID: RP_ID,
         allowCredentials: creds.map((c) => ({
           id: c.credential_id,
-          transports: (c.transports ?? []) as ("ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb")[],
+          transports: (c.transports?.length
+            ? c.transports
+            : ["internal", "hybrid"]) as ("ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb")[],
         })),
         userVerification: "preferred",
       });

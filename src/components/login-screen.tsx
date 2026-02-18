@@ -38,7 +38,12 @@ export function LoginScreen() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
-      setError(msg);
+      // WebAuthn user cancellation — show friendly message
+      if (msg.includes("timed out") || msg.includes("not allowed") || msg.includes("AbortError") || msg.includes("NotAllowedError")) {
+        setError("Passkey prompt was cancelled. Try again.");
+      } else {
+        setError(msg);
+      }
       setLoading(false);
       setStatus(null);
     }
