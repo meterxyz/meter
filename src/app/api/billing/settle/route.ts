@@ -91,6 +91,24 @@ export async function POST(req: NextRequest) {
       console.error("Base settlement failed (charge succeeded):", err);
     }
 
+    // Get card info for history record
+    const pmObj = typeof defaultPm === "string"
+      ? await stripe.paymentMethods.retrieve(defaultPm)
+      : defaultPm;
+    const historyId = `stl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    await supabase.from("settlement_history").insert({
+      id: historyId,
+      user_id: userId,
+      amount,
+      stripe_payment_intent_id: paymentIntent.id,
+      tx_hash: txHash ?? null,
+      message_count: messageIds?.length ?? 0,
+      charge_count: chargeIds?.length ?? 0,
+      card_last4: pmObj && "card" in pmObj ? pmObj.card?.last4 ?? null : null,
+      card_brand: pmObj && "card" in pmObj ? pmObj.card?.brand ?? null : null,
+      status: "succeeded",
+    }).then(() => {}).catch((e) => console.error("Failed to write settlement history:", e));
+
     return NextResponse.json({
       success: true,
       paymentIntentId: paymentIntent.id,
