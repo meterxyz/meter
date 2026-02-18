@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useMeterStore } from "@/lib/store";
 import { ChatView } from "@/components/chat-view";
@@ -8,7 +8,7 @@ import { LoginScreen } from "@/components/login-screen";
 import { AuthorizeScreen } from "@/components/authorize-screen";
 import { GmailScreen } from "@/components/gmail-screen";
 
-export default function Home() {
+function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const authenticated = useMeterStore((s) => s.authenticated);
@@ -50,4 +50,12 @@ export default function Home() {
   }
 
   return <ChatView />;
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
+  );
 }
