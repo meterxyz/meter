@@ -1,15 +1,15 @@
 "use client";
 
-import { useRef, useEffect, useMemo, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { ActionCard } from "@/components/action-card";
+import { SettlePill } from "@/components/settle-pill";
 import { ConnectorsBar } from "@/components/connectors-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
-import { useWorkspaceStore } from "@/lib/workspace-store";
 import { useSessionSync } from "@/lib/use-session-sync";
 import { useDecisionsStore } from "@/lib/decisions-store";
 import ReactMarkdown from "react-markdown";
@@ -158,19 +158,12 @@ export function ChatView() {
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const userId = useMeterStore((s) => s.userId);
-  const wsCompanies = useWorkspaceStore((s) => s.companies);
-  const wsActiveCompanyId = useWorkspaceStore((s) => s.activeCompanyId);
-  const activeCompanyName = useMemo(
-    () => wsCompanies.find((c) => c.id === wsActiveCompanyId)?.name ?? activeProject?.name ?? "Meter",
-    [wsCompanies, wsActiveCompanyId, activeProject]
-  );
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const modelPickerRef = useRef<HTMLDivElement>(null);
-  const [showHeaderMeterDropdown, setShowHeaderMeterDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -199,23 +192,6 @@ export function ChatView() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [modelPickerOpen]);
-
-  const headerMeterStats = useMemo(() => {
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-    const weekAgo = now - 7 * dayMs;
-    const monthAgo = now - 30 * dayMs;
-    const assistantMsgs = (activeProject?.messages ?? []).filter((m) => m.role === "assistant" && m.cost !== undefined);
-
-    return {
-      today: activeProject?.todayCost ?? 0,
-      week: assistantMsgs.filter((m) => m.timestamp >= weekAgo).reduce((sum, m) => sum + (m.cost ?? 0), 0),
-      month: assistantMsgs.filter((m) => m.timestamp >= monthAgo).reduce((sum, m) => sum + (m.cost ?? 0), 0),
-      total: activeProject?.totalCost ?? 0,
-      messagesToday: activeProject?.todayMessageCount ?? 0,
-      tokensToday: (activeProject?.todayTokensIn ?? 0) + (activeProject?.todayTokensOut ?? 0),
-    };
-  }, [activeProject]);
 
   const openedRef = useRef(false);
   useEffect(() => {
@@ -430,29 +406,7 @@ export function ChatView() {
             <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
           </div>
           <div className="relative flex items-center gap-2">
-            <button
-              onClick={() => setShowHeaderMeterDropdown((v) => !v)}
-              className="rounded-md border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
-            >
-              {activeCompanyName} · ${headerMeterStats.total.toFixed(2)} total
-            </button>
-            {showHeaderMeterDropdown && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowHeaderMeterDropdown(false)} />
-                <div className="absolute right-10 top-full z-50 mt-2 w-[300px] rounded-xl border border-border bg-card p-3.5 shadow-xl">
-                  <div className="space-y-1.5 font-mono text-[11px]">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Today</span><span>${headerMeterStats.today.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">This week</span><span>${headerMeterStats.week.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">This month</span><span>${headerMeterStats.month.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">All time</span><span>${headerMeterStats.total.toFixed(2)}</span></div>
-                  </div>
-                  <div className="my-3 h-px bg-border" />
-                  <div className="font-mono text-[10px] text-muted-foreground/80">
-                    {headerMeterStats.messagesToday} messages · {(headerMeterStats.tokensToday / 1000).toFixed(1)}K tokens
-                  </div>
-                </div>
-              </>
-            )}
+            <SettlePill />
             <button
               onClick={toggleInspector}
               className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 transition-colors hover:bg-foreground/5"

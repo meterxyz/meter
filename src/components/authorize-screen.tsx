@@ -56,7 +56,7 @@ function CardForm() {
 
         if (!res.ok) throw new Error(data.error || "Failed to confirm");
 
-        setCardOnFile(true, data.cardLast4);
+        setCardOnFile(true, data.cardLast4, data.cardBrand);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
