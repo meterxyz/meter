@@ -167,13 +167,28 @@ export async function POST(req: NextRequest) {
           const err = streamErr as Error & {
             status?: number;
             code?: string;
+            type?: string;
             headers?: Headers;
             error?: Record<string, unknown>;
           };
+
+          console.error("[chat stream error]", {
+            status: err.status,
+            code: err.code,
+            type: err.type,
+            message: err.message,
+            error: err.error,
+          });
+
+          // Broad rate limit detection — check status, code, type, message, and nested error body
+          const errorStr = JSON.stringify(err.error ?? "").toLowerCase();
+          const msgStr = (err.message ?? "").toLowerCase();
           const isRateLimit =
             err.status === 429 ||
             err.code === "rate_limit_exceeded" ||
-            /rate.?limit/i.test(err.message);
+            err.type === "rate_limit_error" ||
+            /rate.?limit|too many request|quota|throttl|capacity|overloaded/i.test(msgStr) ||
+            /rate.?limit|too many request|quota|throttl|capacity|overloaded/i.test(errorStr);
 
           // Extract retry/reset timing from headers or error body
           let retryAfter: string | null = null;
@@ -182,7 +197,14 @@ export async function POST(req: NextRequest) {
               err.headers.get("retry-after") ||
               err.headers.get("x-ratelimit-reset") ||
               err.headers.get("x-ratelimit-reset-requests") ||
+              err.headers.get("x-ratelimit-reset-tokens") ||
               null;
+          }
+          // Also check nested error body for reset info
+          if (!retryAfter && err.error) {
+            const metadata = err.error.metadata as Record<string, unknown> | undefined;
+            if (metadata?.retry_after) retryAfter = String(metadata.retry_after);
+            if (metadata?.reset) retryAfter = String(metadata.reset);
           }
 
           // Extract provider name from model id (e.g. "anthropic/claude-opus-4" → "Anthropic")
