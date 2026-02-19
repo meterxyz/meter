@@ -3,6 +3,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMeterStore, ChatMessage, PaymentCard } from "@/lib/store";
 import { useDecisionsStore, Decision } from "@/lib/decisions-store";
+import { CONNECTORS } from "@/lib/connectors";
+import { isApiKeyProvider, initiateOAuthFlow } from "@/lib/oauth-client";
+import { ApiKeyDialog } from "@/components/api-key-dialog";
+import { AddCardModal } from "@/components/add-card-modal";
+
+const INSPECTOR_TABS = ["decisions", "payments", "controls", "connections"] as const;
 
 export function Inspector() {
   const {
@@ -12,19 +18,22 @@ export function Inspector() {
     setInspectorTab,
     projects,
     activeProjectId,
-    logout,
   } = useMeterStore();
 
   if (!inspectorOpen) return null;
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
-  const tabs = ["usage", "purchases", "decisions", "controls"] as const;
+  useEffect(() => {
+    if (!INSPECTOR_TABS.includes(inspectorTab as typeof INSPECTOR_TABS[number])) {
+      setInspectorTab("decisions");
+    }
+  }, [inspectorTab, setInspectorTab]);
 
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={() => setInspectorOpen(false)} />
-      <div className="fixed right-0 top-0 h-screen w-[380px] border-l border-border bg-card flex flex-col z-50">
+      <div className="fixed right-0 top-0 h-screen w-[420px] border-l border-border bg-card flex flex-col z-50">
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
             Meter
@@ -41,11 +50,11 @@ export function Inspector() {
         </div>
 
         <div className="flex border-b border-border">
-          {tabs.map((tab) => (
+          {INSPECTOR_TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setInspectorTab(tab)}
-              className={`flex-1 py-2.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2.5 font-mono text-[11px] uppercase tracking-wider transition-colors ${
                 inspectorTab === tab
                   ? "text-foreground border-b border-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -57,35 +66,17 @@ export function Inspector() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {inspectorTab === "usage" && <UsageTab project={activeProject} />}
-          {inspectorTab === "purchases" && <PurchasesTab activeProject={activeProject} />}
           {inspectorTab === "decisions" && <DecisionsTab activeProjectId={activeProject?.id ?? null} />}
+          {inspectorTab === "payments" && <PaymentsTab activeProject={activeProject} />}
           {inspectorTab === "controls" && <SettingsTab activeProjectId={activeProject?.id ?? null} />}
-        </div>
-
-        <div className="border-t border-border p-4">
-          <button
-            onClick={logout}
-            className="w-full rounded-lg border border-border py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5"
-          >
-            Sign Out
-          </button>
+          {inspectorTab === "connections" && <ConnectionsTab />}
         </div>
       </div>
     </>
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-xs text-foreground font-mono">{value}</span>
-    </div>
-  );
-}
-
-/* ─── USAGE TAB ─── */
+/* ─── SHARED TYPES ─── */
 interface ProjectLike {
   messages: ChatMessage[];
   todayCost: number;
@@ -96,112 +87,6 @@ interface ProjectLike {
   totalCost: number;
   settlementError?: string | null;
   chatBlocked?: boolean;
-}
-
-function UsageTab({ project }: { project: ProjectLike | null }) {
-  const assistantMsgs = (project?.messages ?? []).filter((m) => m.role === "assistant" && m.cost !== undefined);
-  const stats = useMemo(() => {
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-    const startOfDay = now - (now % dayMs);
-    const weekAgo = now - 7 * dayMs;
-    const monthAgo = now - 30 * dayMs;
-
-    const today = assistantMsgs
-      .filter((m) => m.timestamp >= startOfDay)
-      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
-    const week = assistantMsgs
-      .filter((m) => m.timestamp >= weekAgo)
-      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
-    const month = assistantMsgs
-      .filter((m) => m.timestamp >= monthAgo)
-      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
-
-    const lifetime = assistantMsgs.reduce((sum, m) => sum + (m.cost ?? 0), 0);
-    const totalTokensIn = assistantMsgs.reduce((sum, m) => sum + (m.tokensIn ?? 0), 0);
-    const totalTokensOut = assistantMsgs.reduce((sum, m) => sum + (m.tokensOut ?? 0), 0);
-    const totalMessages = assistantMsgs.length;
-    const settledCount = assistantMsgs.filter((m) => m.settled).length;
-    const pendingCount = assistantMsgs.filter((m) => !m.settled).length;
-
-    const byModel: Record<string, { cost: number; count: number }> = {};
-    for (const m of assistantMsgs) {
-      const key = m.model ?? "unknown";
-      const existing = byModel[key] || { cost: 0, count: 0 };
-      byModel[key] = { cost: existing.cost + (m.cost ?? 0), count: existing.count + 1 };
-    }
-
-    return {
-      today,
-      week,
-      month,
-      lifetime,
-      totalTokensIn,
-      totalTokensOut,
-      totalMessages,
-      settledCount,
-      pendingCount,
-      byModel,
-    };
-  }, [assistantMsgs]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Lifetime Spend
-        </div>
-        <div className="flex items-baseline gap-2 mb-3">
-          <span className="font-mono text-2xl text-foreground">${stats.lifetime.toFixed(2)}</span>
-        </div>
-        <div className="space-y-1 font-mono text-[11px]">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground/60">Today</span>
-            <span className="text-foreground/70">${stats.today.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground/60">This week</span>
-            <span className="text-foreground/70">${stats.week.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground/60">This month</span>
-            <span className="text-foreground/70">${stats.month.toFixed(2)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="h-px bg-border" />
-
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Activity
-        </div>
-        <StatRow label="Messages" value={stats.totalMessages.toString()} />
-        <StatRow label="Tokens In" value={stats.totalTokensIn.toLocaleString()} />
-        <StatRow label="Tokens Out" value={stats.totalTokensOut.toLocaleString()} />
-        <StatRow label="Settled" value={stats.settledCount.toString()} />
-        <StatRow label="Pending" value={stats.pendingCount.toString()} />
-      </div>
-
-      <div className="h-px bg-border" />
-
-      {Object.keys(stats.byModel).length > 0 && (
-        <div>
-          <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-            By Model
-          </div>
-          {Object.entries(stats.byModel).map(([model, data]) => (
-            <div key={model} className="flex items-center justify-between py-1.5">
-              <span className="text-xs text-muted-foreground">{model}</span>
-              <span className="text-xs text-foreground font-mono">
-                ${data.cost.toFixed(2)} &middot; {data.count} msgs
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 /* ─── SETTINGS TAB ─── */
@@ -242,9 +127,10 @@ function SettingsTab({ activeProjectId }: { activeProjectId: string | null }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <>
+      <div className="flex flex-col gap-4">
       <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+        <div className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Spend Controls
         </div>
         <div className="space-y-2">
@@ -267,10 +153,102 @@ function SettingsTab({ activeProjectId }: { activeProjectId: string | null }) {
             onBlur={() => saveLimitOnBlur("perTxnLimit", perTxnInput)}
           />
         </div>
-        <p className="mt-2 font-mono text-[9px] text-muted-foreground/30">
+        <p className="mt-2 font-mono text-[10px] text-muted-foreground/30">
           Leave blank for no limit. Limits are enforced server-side.
         </p>
       </div>
+    </div>
+  );
+}
+
+/* ─── CONNECTIONS TAB ─── */
+function ConnectionsTab() {
+  const { connectedServices, userId, disconnectServiceRemote, connectionsLoading } = useMeterStore();
+  const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
+
+  const handleConnect = (providerId: string) => {
+    if (!userId) return;
+    if (isApiKeyProvider(providerId)) {
+      setApiKeyProvider(providerId);
+    } else {
+      initiateOAuthFlow(providerId, userId);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {connectionsLoading && (
+        <div className="rounded-lg border border-border/50 bg-foreground/[0.03] px-3 py-2 font-mono text-[11px] text-muted-foreground/60">
+          Syncing connections...
+        </div>
+      )}
+      <div className="space-y-1.5">
+        {CONNECTORS.map((connector) => {
+          const connected = !!connectedServices[connector.id];
+          return (
+            <div
+              key={connector.id}
+              className="flex items-center gap-2.5 rounded-lg border border-border/50 px-3 py-2 hover:bg-foreground/[0.03] transition-colors"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="text-muted-foreground shrink-0"
+              >
+                <path d={connector.iconPath} />
+              </svg>
+              <div className="min-w-0">
+                <div className="text-[12px] text-foreground">{connector.name}</div>
+                <div className="font-mono text-[10px] text-muted-foreground/50">
+                  {connector.description}
+                </div>
+              </div>
+              <div className="ml-auto shrink-0">
+                {connected ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px] text-emerald-500">
+                      Connected
+                    </span>
+                    <button
+                      onClick={() => disconnectServiceRemote(connector.id)}
+                      className="text-muted-foreground/40 hover:text-red-400 transition-colors"
+                      title="Disconnect"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleConnect(connector.id)}
+                    className="rounded-md border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                  >
+                    Connect
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {apiKeyProvider && (
+        <ApiKeyDialog
+          provider={apiKeyProvider}
+          onClose={() => setApiKeyProvider(null)}
+        />
+      )}
     </div>
   );
 }
@@ -297,8 +275,8 @@ function DecisionRow({ decision }: { decision: Decision }) {
         onClick={() => setExpanded(!expanded)}
       >
         <svg
-          width="10"
-          height="10"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -314,25 +292,25 @@ function DecisionRow({ decision }: { decision: Decision }) {
             isDecided ? "bg-emerald-500" : "bg-amber-500"
           }`}
         />
-        <span className="flex-1 truncate font-mono text-[11px] text-foreground/80">
+        <span className="flex-1 truncate font-mono text-[12px] text-foreground/80">
           {decision.title}
         </span>
         <div className="hidden group-hover:flex items-center gap-1 shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); handleRevisit(); }}
-            className="rounded px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+            className="rounded px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
           >
             revisit
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); archiveDecision(decision.id); }}
-            className="rounded px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+            className="rounded px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/40 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
           >
             archive
           </button>
         </div>
         <span
-          className={`group-hover:hidden shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+          className={`group-hover:hidden shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
             isDecided
               ? "bg-emerald-500/10 text-emerald-500"
               : "bg-amber-500/10 text-amber-500"
@@ -346,16 +324,16 @@ function DecisionRow({ decision }: { decision: Decision }) {
         <div className="ml-6 mr-1 mb-2 mt-0.5 flex flex-col gap-1.5 border-l border-border/40 pl-3">
           {decision.choice && (
             <div>
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Choice</span>
-              <p className="font-mono text-[11px] text-foreground/70 mt-0.5">{decision.choice}</p>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50">Choice</span>
+              <p className="font-mono text-[12px] text-foreground/70 mt-0.5">{decision.choice}</p>
             </div>
           )}
           {Array.isArray(decision.alternatives) && decision.alternatives.length > 0 && (
             <div>
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Alternatives</span>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50">Alternatives</span>
               <ul className="mt-0.5">
                 {decision.alternatives.map((alt, i) => (
-                  <li key={i} className="font-mono text-[11px] text-foreground/50 flex items-start gap-1.5">
+                  <li key={i} className="font-mono text-[12px] text-foreground/50 flex items-start gap-1.5">
                     <span className="text-muted-foreground/30 mt-px">-</span>
                     {alt}
                   </li>
@@ -365,12 +343,12 @@ function DecisionRow({ decision }: { decision: Decision }) {
           )}
           {decision.reasoning && (
             <div>
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">Reasoning</span>
-              <p className="font-mono text-[11px] text-foreground/50 mt-0.5">{decision.reasoning}</p>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50">Reasoning</span>
+              <p className="font-mono text-[12px] text-foreground/50 mt-0.5">{decision.reasoning}</p>
             </div>
           )}
           {!decision.choice && !decision.reasoning && (!Array.isArray(decision.alternatives) || decision.alternatives.length === 0) && (
-            <p className="font-mono text-[10px] text-muted-foreground/30 italic">No details recorded</p>
+            <p className="font-mono text-[11px] text-muted-foreground/30 italic">No details recorded</p>
           )}
         </div>
       )}
@@ -393,7 +371,7 @@ function DecisionsTab({ activeProjectId }: { activeProjectId: string | null }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+        <div className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Decisions
         </div>
         {scoped.length === 0 ? (
@@ -401,7 +379,7 @@ function DecisionsTab({ activeProjectId }: { activeProjectId: string | null }) {
             <span className="font-mono text-xs text-muted-foreground/40">
               No decisions yet
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground/30">
+            <span className="font-mono text-[11px] text-muted-foreground/30">
               Decisions are logged as you chat
             </span>
           </div>
@@ -417,7 +395,7 @@ function DecisionsTab({ activeProjectId }: { activeProjectId: string | null }) {
         <>
           <div className="h-px bg-border" />
           <div>
-            <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+            <div className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">
               Unassigned
             </div>
             <div className="flex flex-col gap-0.5">
@@ -433,12 +411,7 @@ function DecisionsTab({ activeProjectId }: { activeProjectId: string | null }) {
 }
 
 /* ─── CARD VISUAL ─── */
-const BRAND_COLORS: Record<string, string> = {
-  visa: "from-blue-900/80 to-blue-700/60",
-  mastercard: "from-orange-900/80 to-red-800/60",
-  amex: "from-emerald-900/80 to-emerald-700/60",
-  discover: "from-amber-900/80 to-amber-700/60",
-};
+const CARD_BACKGROUND = "from-zinc-950/70 via-zinc-900/70 to-zinc-800/60";
 
 function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
   card: PaymentCard;
@@ -449,16 +422,14 @@ function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
   canRemove: boolean;
 }) {
   const brandLabel = card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
-  const gradient = BRAND_COLORS[card.brand] ?? "from-zinc-800 to-zinc-700";
-
   return (
     <div
       onClick={onClick}
-      className={`relative w-full rounded-xl p-4 bg-gradient-to-br ${gradient} border border-white/10 cursor-pointer transition-all duration-200 ${
+      className={`relative w-full max-w-[320px] aspect-[1.586/1] mx-auto rounded-2xl p-4 bg-gradient-to-br ${CARD_BACKGROUND} border border-white/10 cursor-pointer transition-all duration-200 ${
         isTop ? "shadow-lg" : "hover:-translate-y-1 shadow-md"
       }`}
       style={{
-        marginTop: index > 0 ? "-52px" : undefined,
+        marginTop: index > 0 ? "-44px" : undefined,
         zIndex: isTop ? 10 : 10 - index,
       }}
     >
@@ -470,18 +441,18 @@ function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
           <rect x="1" y="1" width="22" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
           <line x1="1" y1="5" x2="23" y2="5" stroke="currentColor" strokeWidth="1.5" />
         </svg>
-        <span className="font-mono text-[10px] text-white/40 uppercase">{brandLabel}</span>
+        <span className="font-mono text-[11px] text-white/50 uppercase">{brandLabel}</span>
       </div>
       <div className="flex items-end justify-between">
-        <span className="font-mono text-sm text-white/80 tracking-widest">{card.last4}</span>
-        <span className="font-mono text-[10px] text-white/40">
+        <span className="font-mono text-[12px] text-white/80 tracking-widest">{card.last4}</span>
+        <span className="font-mono text-[11px] text-white/50">
           {String(card.expMonth).padStart(2, "0")}/{String(card.expYear).slice(-2)}
         </span>
       </div>
       {isTop && canRemove && onRemove && (
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className="absolute bottom-2 right-2 rounded px-1.5 py-0.5 font-mono text-[9px] text-white/30 hover:text-white/60 hover:bg-white/10 transition-colors"
+          className="absolute bottom-2 right-2 rounded px-1.5 py-0.5 font-mono text-[10px] text-white/40 hover:text-white/70 hover:bg-white/10 transition-colors"
         >
           remove
         </button>
@@ -490,8 +461,8 @@ function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
   );
 }
 
-/* ─── PURCHASES TAB ─── */
-function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) {
+/* ─── PAYMENTS TAB ─── */
+function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
   const cards = useMeterStore((s) => s.cards);
   const cardsLoading = useMeterStore((s) => s.cardsLoading);
   const fetchCards = useMeterStore((s) => s.fetchCards);
@@ -500,7 +471,6 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
   const settlementHistory = useMeterStore((s) => s.settlementHistory);
   const settlementHistoryLoading = useMeterStore((s) => s.settlementHistoryLoading);
   const fetchSettlementHistory = useMeterStore((s) => s.fetchSettlementHistory);
-  const userId = useMeterStore((s) => s.userId);
   const getPendingBalance = useMeterStore((s) => s.getPendingBalance);
   const settleAll = useMeterStore((s) => s.settleAll);
   const isSettling = useMeterStore((s) => s.isSettling);
@@ -510,7 +480,7 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
 
   const settlementError = activeProject?.settlementError ?? null;
 
-  const [addingCard, setAddingCard] = useState(false);
+  const [addCardOpen, setAddCardOpen] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [settleSuccess, setSettleSuccess] = useState(false);
   const workspaceId = activeProject?.id ?? null;
@@ -525,35 +495,6 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
   const sorted = useMemo(() => {
     return [...cards].sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
   }, [cards]);
-
-  const handleAddCard = async () => {
-    if (!userId) return;
-    setAddingCard(true);
-    try {
-      const res = await fetch("/api/billing/cards/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.clientSecret && typeof window !== "undefined") {
-          const { loadStripe } = await import("@stripe/stripe-js");
-          const stripeJs = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
-          if (stripeJs) {
-            const { error } = await stripeJs.confirmCardSetup(data.clientSecret, {
-              payment_method: { card: { token: "tok_visa" } as unknown as import("@stripe/stripe-js").StripeCardElement },
-            });
-            if (!error) {
-              await fetchCards();
-            }
-          }
-        }
-      }
-    } catch { /* silent */ } finally {
-      setAddingCard(false);
-    }
-  };
 
   const handleRemove = async (pmId: string) => {
     setRemoveError(null);
@@ -582,23 +523,23 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
       {/* Settle */}
       <div className="rounded-lg border border-border p-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Outstanding</span>
-          <span className="font-mono text-sm font-medium tabular-nums text-foreground">
+          <span className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider">Outstanding</span>
+          <span className="font-mono text-[13px] font-medium tabular-nums text-foreground">
             ${pendingBalance.toFixed(2)}
           </span>
         </div>
 
         {settlementError && (
           <div className="mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
-            <span className="font-mono text-[10px] text-red-400">{settlementError}</span>
-            <p className="mt-0.5 font-mono text-[9px] text-red-400/60">Please update your card or try again.</p>
+            <span className="font-mono text-[11px] text-red-400">{settlementError}</span>
+            <p className="mt-0.5 font-mono text-[10px] text-red-400/60">Please update your card or try again.</p>
           </div>
         )}
 
         <button
           onClick={handleSettle}
           disabled={isSettling || pendingBalance <= 0}
-          className={`w-full rounded-lg py-2 font-mono text-[11px] transition-colors ${
+          className={`w-full rounded-lg py-2.5 font-mono text-[12px] transition-colors ${
             settleSuccess
               ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
               : "bg-foreground text-background hover:bg-foreground/90 disabled:opacity-40"
@@ -608,7 +549,7 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
         </button>
 
         {cardLast4 && pendingBalance > 0 && (
-          <p className="mt-1.5 text-center font-mono text-[9px] text-muted-foreground/40">
+          <p className="mt-1.5 text-center font-mono text-[10px] text-muted-foreground/40">
             Charged to {brandLabel} {cardLast4}
           </p>
         )}
@@ -618,21 +559,21 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
 
       {/* Payment Cards — Apple Wallet stack */}
       <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+        <div className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Payment Cards
         </div>
         {cardsLoading && cards.length === 0 ? (
-          <div className="py-6 text-center font-mono text-[11px] text-muted-foreground/40">Loading cards...</div>
+          <div className="py-6 text-center font-mono text-[12px] text-muted-foreground/40">Loading cards...</div>
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-3 rounded-lg border border-dashed border-border">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/30">
               <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
               <line x1="1" y1="10" x2="23" y2="10" />
             </svg>
-            <span className="font-mono text-[11px] text-muted-foreground/40">No cards yet</span>
+            <span className="font-mono text-[12px] text-muted-foreground/40">No cards yet</span>
           </div>
         ) : (
-          <div className="relative pb-2">
+          <div className="relative pb-2 flex flex-col items-center">
             {sorted.map((card, i) => (
               <CardVisual
                 key={card.id}
@@ -647,14 +588,14 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
           </div>
         )}
         {removeError && (
-          <p className="mt-1 font-mono text-[10px] text-red-400">{removeError}</p>
+          <p className="mt-1 font-mono text-[11px] text-red-400">{removeError}</p>
         )}
         <button
-          onClick={handleAddCard}
-          disabled={addingCard}
-          className="mt-2 w-full rounded-lg border border-border py-2 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5 disabled:opacity-40"
+          onClick={() => setAddCardOpen(true)}
+          disabled={addCardOpen}
+          className="mt-2 w-full rounded-lg border border-border py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5 disabled:opacity-40"
         >
-          {addingCard ? "Adding..." : "+ Add Card"}
+          + Add Card
         </button>
       </div>
 
@@ -662,15 +603,15 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
 
       {/* Settlement History */}
       <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+        <div className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Settlement History
         </div>
         {settlementHistoryLoading && settlementHistory.length === 0 ? (
-          <div className="py-4 text-center font-mono text-[11px] text-muted-foreground/40">Loading...</div>
+          <div className="py-4 text-center font-mono text-[12px] text-muted-foreground/40">Loading...</div>
         ) : settlementHistory.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2">
-            <span className="font-mono text-xs text-muted-foreground/40">No settlements yet</span>
-            <span className="font-mono text-[10px] text-muted-foreground/30">
+            <span className="font-mono text-[12px] text-muted-foreground/40">No settlements yet</span>
+            <span className="font-mono text-[11px] text-muted-foreground/30">
               Settlements appear here as they happen
             </span>
           </div>
@@ -681,7 +622,7 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
                 ? s.cardBrand.charAt(0).toUpperCase() + s.cardBrand.slice(1)
                 : "";
               return (
-                <div key={s.id} className="flex items-center justify-between py-1.5 font-mono text-[11px]">
+                <div key={s.id} className="flex items-center justify-between py-1.5 font-mono text-[12px]">
                   <div className="flex flex-col gap-0.5 min-w-0">
                     <span className="text-foreground/80">
                       ${s.amount.toFixed(2)}
@@ -689,11 +630,11 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
                         {new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
                     </span>
-                    <span className="text-[9px] text-muted-foreground/40">
+                    <span className="text-[10px] text-muted-foreground/40">
                       {brandLabel} {s.cardLast4 ?? ""} &middot; {s.messageCount} msgs
                     </span>
                   </div>
-                  <span className={`shrink-0 text-[9px] ${s.status === "succeeded" ? "text-emerald-500/60" : "text-red-400/60"}`}>
+                  <span className={`shrink-0 text-[10px] ${s.status === "succeeded" ? "text-emerald-500/60" : "text-red-400/60"}`}>
                     {s.status}
                   </span>
                 </div>
@@ -702,8 +643,8 @@ function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) 
           </div>
         )}
       </div>
-
-    </div>
+      <AddCardModal open={addCardOpen} onClose={() => setAddCardOpen(false)} />
+    </>
   );
 }
 

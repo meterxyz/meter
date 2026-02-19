@@ -126,7 +126,7 @@ interface MeterState {
   disconnectService: (id: string) => void;
   fetchConnectionStatus: () => Promise<void>;
   disconnectServiceRemote: (id: string) => Promise<void>;
-  submitApiKey: (provider: string, apiKey: string) => Promise<boolean>;
+  submitApiKey: (provider: string, apiKey: string, metadata?: Record<string, unknown>) => Promise<boolean>;
   logout: () => void;
 
   addProject: (name: string, id?: string) => void;
@@ -259,7 +259,7 @@ export const useMeterStore = create<MeterState>()(
       decisionMode: false,
 
       inspectorOpen: false,
-      inspectorTab: "usage",
+      inspectorTab: "decisions",
 
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
       setCardOnFile: (v, last4, brand) => set({ cardOnFile: v, cardLast4: last4 ?? null, cardBrand: brand ?? null }),
@@ -301,14 +301,14 @@ export const useMeterStore = create<MeterState>()(
         }
       },
 
-      submitApiKey: async (provider, apiKey) => {
+      submitApiKey: async (provider, apiKey, metadata) => {
         const userId = get().userId;
         if (!userId) return false;
         try {
           const res = await fetch("/api/oauth/api-key", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, provider, apiKey }),
+            body: JSON.stringify({ userId, provider, apiKey, metadata: metadata ?? null }),
           });
           if (res.ok) {
             set((s) => ({ connectedServices: { ...s.connectedServices, [provider]: true } }));

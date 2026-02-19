@@ -3,12 +3,12 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
+import { HeaderMeter } from "@/components/header-meter";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { ProfileSettings } from "@/components/profile-settings";
 import { ActionCard } from "@/components/action-card";
-import { ApproveButton } from "@/components/approve-button";
-import { ConnectorsBar } from "@/components/connectors-bar";
+import { ActionsBar } from "@/components/actions-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
 import { useSessionSync } from "@/lib/use-session-sync";
@@ -275,7 +275,7 @@ export function ChatView() {
     if (openedRef.current) return;
     openedRef.current = true;
     setInspectorOpen(true);
-    setInspectorTab("usage");
+    setInspectorTab("decisions");
   }, [setInspectorOpen, setInspectorTab]);
 
   const handleProjectSwitch = (projectId: string) => {
@@ -558,7 +558,7 @@ export function ChatView() {
         </div>
       )}
 
-      <div className={`relative flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
+      <div className={`relative flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[420px]" : ""}`}>
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="relative flex items-center gap-2" ref={logoMenuRef}>
             <button
@@ -567,7 +567,7 @@ export function ChatView() {
             >
               <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
               <svg
-                width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                 className="text-muted-foreground/40"
               >
@@ -601,7 +601,7 @@ export function ChatView() {
             )}
           </div>
           <div className="relative flex items-center gap-2">
-            <ApproveButton />
+            <HeaderMeter />
             <button
               onClick={toggleInspector}
               className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 transition-colors hover:bg-foreground/5"
@@ -690,8 +690,8 @@ export function ChatView() {
           <div className="mx-auto max-w-2xl">
             {/* Unified box */}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
-              {/* Connectors bar — top section */}
-              <ConnectorsBar />
+              {/* Actions bar — top section */}
+              <ActionsBar />
 
               {/* Model picker + composer area */}
               <div ref={modelPickerRef}>

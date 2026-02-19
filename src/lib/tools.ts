@@ -1,5 +1,10 @@
 import { getSupabaseServer } from "@/lib/supabase";
 import { CONNECTORS, ConnectorToolDef } from "@/lib/connectors";
+import { getValidAccessToken } from "@/lib/oauth";
+import { searchEmails, readEmail } from "@/lib/connectors/gmail";
+import { listRepos, createRepo, createIssue } from "@/lib/connectors/github";
+import { listDeployments, triggerDeployment } from "@/lib/connectors/vercel";
+import { listPayments, getBalance, listSubscriptions } from "@/lib/connectors/stripe";
 
 /* ─── Tool schemas (OpenAI function-calling format) ─────────────── */
 
@@ -142,17 +147,59 @@ export async function executeTool(
       return saveDecision(args, ctx);
     case "list_decisions":
       return listDecisions(ctx);
-    // Connector tools — placeholder implementations
+    // Connector tools
     case "search_emails":
+      return withConnectorToken("gmail", ctx, async (token) =>
+        searchEmails(token, args.query as string, args.max_results as number | undefined)
+      );
     case "read_email":
-    case "github_create_repo":
+      return withConnectorToken("gmail", ctx, async (token) =>
+        readEmail(token, args.email_id as string)
+      );
     case "github_list_repos":
+      return withConnectorToken("github", ctx, async (token) =>
+        listRepos(token, args.limit as number | undefined)
+      );
+    case "github_create_repo":
+      return withConnectorToken("github", ctx, async (token) =>
+        createRepo(token, {
+          name: args.name as string,
+          description: args.description as string | undefined,
+          private: args.private as boolean | undefined,
+        })
+      );
     case "github_create_issue":
-    case "vercel_deploy":
+      return withConnectorToken("github", ctx, async (token) =>
+        createIssue(token, {
+          repo: args.repo as string,
+          title: args.title as string,
+          body: args.body as string | undefined,
+        })
+      );
     case "vercel_list_deployments":
+      return withConnectorToken("vercel", ctx, async (token) =>
+        listDeployments(token, args.project as string, args.limit as number | undefined)
+      );
+    case "vercel_deploy":
+      return withConnectorToken("vercel", ctx, async (token) =>
+        triggerDeployment(token, args.project as string)
+      );
     case "stripe_list_payments":
+      return withConnectorToken("stripe", ctx, async (token) =>
+        listPayments(token, {
+          limit: args.limit as number | undefined,
+          status: args.status as string | undefined,
+        })
+      );
     case "stripe_get_balance":
+      return withConnectorToken("stripe", ctx, async (token) =>
+        getBalance(token)
+      );
     case "stripe_list_subscriptions":
+      return withConnectorToken("stripe", ctx, async (token) =>
+        listSubscriptions(token, { status: args.status as string | undefined })
+      );
+    // Connector tools — placeholder implementations
     case "mercury_get_accounts":
     case "mercury_list_transactions":
     case "ramp_list_transactions":
@@ -162,6 +209,26 @@ export async function executeTool(
       return `[${name}] This connector tool is not yet implemented. The service needs to be fully connected first.`;
     default:
       return `Unknown tool: ${name}`;
+  }
+}
+
+async function withConnectorToken(
+  providerId: string,
+  ctx: ToolContext,
+  handler: (accessToken: string, metadata?: Record<string, unknown> | null) => Promise<unknown>
+): Promise<string> {
+  if (!ctx.userId) {
+    return "Missing user session. Please sign in and connect the service.";
+  }
+  try {
+    const token = await getValidAccessToken(ctx.userId, providerId);
+    if (!token) {
+      return `No ${providerId} connection found. Connect it in Settings.`;
+    }
+    const result = await handler(token.accessToken, token.metadata ?? null);
+    return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+  } catch (err) {
+    return `Failed to call ${providerId} connector: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
 

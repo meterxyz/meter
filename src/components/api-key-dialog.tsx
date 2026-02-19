@@ -19,17 +19,21 @@ interface ApiKeyDialogProps {
 
 export function ApiKeyDialog({ provider, onClose }: ApiKeyDialogProps) {
   const [apiKey, setApiKey] = useState("");
+  const [projectUrl, setProjectUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitApiKey = useMeterStore((s) => s.submitApiKey);
   const connector = CONNECTORS.find((c) => c.id === provider);
+  const needsProjectUrl = provider === "supabase";
 
   const handleSubmit = async () => {
     if (!apiKey.trim()) return;
+    if (needsProjectUrl && !projectUrl.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      const success = await submitApiKey(provider, apiKey.trim());
+      const metadata = needsProjectUrl ? { projectUrl: projectUrl.trim() } : undefined;
+      const success = await submitApiKey(provider, apiKey.trim(), metadata);
       if (success) {
         onClose();
       } else {
@@ -63,6 +67,16 @@ export function ApiKeyDialog({ provider, onClose }: ApiKeyDialogProps) {
             className="font-mono text-sm"
             autoFocus
           />
+          {needsProjectUrl && (
+            <Input
+              type="text"
+              placeholder="Supabase project URL..."
+              value={projectUrl}
+              onChange={(e) => setProjectUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              className="font-mono text-sm"
+            />
+          )}
           {error && (
             <p className="font-mono text-[11px] text-red-400">{error}</p>
           )}
@@ -75,7 +89,7 @@ export function ApiKeyDialog({ provider, onClose }: ApiKeyDialogProps) {
             </button>
             <button
               onClick={handleSubmit}
-              disabled={loading || !apiKey.trim()}
+              disabled={loading || !apiKey.trim() || (needsProjectUrl && !projectUrl.trim())}
               className="rounded-md bg-foreground px-3 py-1.5 font-mono text-[11px] text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
             >
               {loading ? "Connecting..." : "Connect"}

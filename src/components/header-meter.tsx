@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useMeterStore } from "@/lib/store";
 import { MeterIcon } from "./meter-icon";
 
@@ -71,13 +71,63 @@ export function HeaderMeter() {
   const projects = useMeterStore((s) => s.projects);
   const activeProjectId = useMeterStore((s) => s.activeProjectId);
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
-  const todayCost = activeProject?.todayCost ?? 0;
   const isStreaming = activeProject?.isStreaming ?? false;
 
-  const animatedToday = useAnimatedNumber(todayCost);
+  const assistantMsgs = useMemo(
+    () => (activeProject?.messages ?? []).filter((m) => m.role === "assistant" && m.cost != null),
+    [activeProject]
+  );
+
+  const usage = useMemo(() => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const startOfDay = now - (now % dayMs);
+    const weekAgo = now - 7 * dayMs;
+    const monthAgo = now - 30 * dayMs;
+
+    const today = assistantMsgs
+      .filter((m) => (m.timestamp ?? 0) >= startOfDay)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const week = assistantMsgs
+      .filter((m) => (m.timestamp ?? 0) >= weekAgo)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const month = assistantMsgs
+      .filter((m) => (m.timestamp ?? 0) >= monthAgo)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const lifetimeFromMessages = assistantMsgs.reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const lifetime = Math.max(lifetimeFromMessages, activeProject?.totalCost ?? 0);
+
+    const totalTokensIn = assistantMsgs.reduce((sum, m) => sum + (m.tokensIn ?? 0), 0);
+    const totalTokensOut = assistantMsgs.reduce((sum, m) => sum + (m.tokensOut ?? 0), 0);
+    const totalMessages = assistantMsgs.length;
+    const settledCount = assistantMsgs.filter((m) => m.settled).length;
+    const pendingCount = assistantMsgs.filter((m) => !m.settled).length;
+
+    const byModel: Record<string, { cost: number; count: number }> = {};
+    for (const m of assistantMsgs) {
+      const key = m.model ?? "unknown";
+      const existing = byModel[key] || { cost: 0, count: 0 };
+      byModel[key] = { cost: existing.cost + (m.cost ?? 0), count: existing.count + 1 };
+    }
+
+    return {
+      today,
+      week,
+      month,
+      lifetime,
+      totalTokensIn,
+      totalTokensOut,
+      totalMessages,
+      settledCount,
+      pendingCount,
+      byModel,
+    };
+  }, [assistantMsgs, activeProject?.totalCost]);
+
+  const animatedLifetime = useAnimatedNumber(usage.lifetime);
   const costStr = isStreaming
-    ? `$${animatedToday.toFixed(4)}`
-    : `$${animatedToday.toFixed(2)}`;
+    ? `$${animatedLifetime.toFixed(4)}`
+    : `$${animatedLifetime.toFixed(2)}`;
 
   useEffect(() => {
     if (!open) return;
@@ -96,41 +146,30 @@ export function HeaderMeter() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const allMessages = useMemo(
-    () => projects.flatMap((p) => p.messages),
-    [projects]
-  );
-
-  const computePeriodCost = useCallback(
-    (sinceTs: number) =>
-      allMessages
-        .filter((m) => m.role === "assistant" && m.cost != null && (m.timestamp ?? 0) >= sinceTs)
-        .reduce((sum, m) => sum + (m.cost ?? 0), 0),
-    [allMessages]
-  );
-
-  const weeklyCost = useMemo(() => computePeriodCost(startOfWeek()), [computePeriodCost]);
-  const monthlyCost = useMemo(() => computePeriodCost(startOfMonth()), [computePeriodCost]);
-  const lifetimeCost = useMemo(
-    () =>
-      allMessages
-        .filter((m) => m.role === "assistant" && m.cost != null)
-        .reduce((sum, m) => sum + (m.cost ?? 0), 0),
-    [allMessages]
-  );
-
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex h-8 items-center gap-2 rounded-lg border border-border px-2.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
-        title="Today's spend"
+        title="Total spend for this workspace"
       >
+        <div className="flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+            <path d="M9 22v-4h6v4" />
+          </svg>
+          <span className="max-w-[110px] truncate text-foreground">
+            {activeProject?.name ?? "Workspace"}
+          </span>
+        </div>
+        <span className="h-4 w-px bg-border/70" />
         <MeterIcon active={isStreaming} size={14} />
-        <span className="tabular-nums text-foreground">{costStr}</span>
-        <span className="text-[10px] text-muted-foreground/50">today</span>
+        <span className="tabular-nums text-[12px] text-foreground">{costStr}</span>
+        <span className="text-[11px] text-muted-foreground/50 uppercase tracking-wider">
+          TOTAL
+        </span>
         <svg
-          width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
           className={`transition-transform ${open ? "rotate-180" : ""}`}
         >
@@ -139,32 +178,73 @@ export function HeaderMeter() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[280px] rounded-xl border border-border bg-card shadow-xl">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[360px] max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
           <div className="border-b border-border/50 px-4 py-3">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1.5">
+            <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground/60 mb-1.5">
               Resets in
             </div>
             <div className="font-mono text-lg tabular-nums text-foreground">
               {formatCountdown(remaining)}
             </div>
-            <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground/50">
+            <p className="mt-1.5 font-mono text-[11px] leading-relaxed text-muted-foreground/50">
               Today&apos;s spend resets at midnight local time.
             </p>
           </div>
 
           <div className="px-4 py-3">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
+            <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground/60 mb-2">
               Spend
             </div>
             <div className="space-y-1.5">
-              <SpendRow label="Today" amount={todayCost} />
-              <SpendRow label="This week" amount={weeklyCost} />
-              <SpendRow label="This month" amount={monthlyCost} />
-              <SpendRow label="Lifetime" amount={lifetimeCost} />
+              <SpendRow label="Today" amount={usage.today} />
+              <SpendRow label="This week" amount={usage.week} />
+              <SpendRow label="This month" amount={usage.month} />
+              <SpendRow label="Lifetime" amount={usage.lifetime} />
             </div>
           </div>
+
+          <div className="h-px bg-border" />
+
+          <div className="px-4 py-3">
+            <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground/60 mb-2">
+              Activity
+            </div>
+            <StatRow label="Messages" value={usage.totalMessages.toString()} />
+            <StatRow label="Tokens In" value={usage.totalTokensIn.toLocaleString()} />
+            <StatRow label="Tokens Out" value={usage.totalTokensOut.toLocaleString()} />
+            <StatRow label="Settled" value={usage.settledCount.toString()} />
+            <StatRow label="Pending" value={usage.pendingCount.toString()} />
+          </div>
+
+          {Object.keys(usage.byModel).length > 0 && (
+            <>
+              <div className="h-px bg-border" />
+              <div className="px-4 py-3">
+                <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground/60 mb-2">
+                  By Model
+                </div>
+                {Object.entries(usage.byModel).map(([model, data]) => (
+                  <div key={model} className="flex items-center justify-between py-1.5">
+                    <span className="text-[12px] text-muted-foreground">{model}</span>
+                    <span className="text-[12px] text-foreground font-mono">
+                      ${data.cost.toFixed(2)} &middot; {data.count} msgs
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <span className="text-[12px] text-foreground font-mono">{value}</span>
     </div>
   );
 }
@@ -172,8 +252,8 @@ export function HeaderMeter() {
 function SpendRow({ label, amount }: { label: string; amount: number }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="font-mono text-[11px] text-muted-foreground/70">{label}</span>
-      <span className="font-mono text-[11px] tabular-nums text-foreground">
+      <span className="font-mono text-[12px] text-muted-foreground/70">{label}</span>
+      <span className="font-mono text-[12px] tabular-nums text-foreground">
         ${amount.toFixed(2)}
       </span>
     </div>
