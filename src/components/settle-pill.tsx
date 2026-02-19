@@ -9,29 +9,34 @@ export function SettlePill() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const projects = useMeterStore((s) => s.projects);
+  const activeProjectId = useMeterStore((s) => s.activeProjectId);
   const pendingCharges = useMeterStore((s) => s.pendingCharges);
   const isSettling = useMeterStore((s) => s.isSettling);
   const settleAll = useMeterStore((s) => s.settleAll);
   const cardLast4 = useMeterStore((s) => s.cardLast4);
   const cardBrand = useMeterStore((s) => s.cardBrand);
-  const settlementError = useMeterStore((s) => s.settlementError);
   const clearSettlementError = useMeterStore((s) => s.clearSettlementError);
 
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+  const settlementError = activeProject?.settlementError ?? null;
+
   const pendingBalance = useMemo(() => {
-    const msgCost = projects
-      .flatMap((p) => p.messages)
+    if (!activeProject) return 0;
+    const msgCost = activeProject.messages
       .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled)
       .reduce((sum, m) => sum + (m.cost ?? 0), 0);
-    const cardCost = pendingCharges.reduce((sum, c) => sum + c.cost, 0);
+    const cardCost = pendingCharges
+      .filter((c) => c.workspaceId === activeProject.id)
+      .reduce((sum, c) => sum + c.cost, 0);
     return msgCost + cardCost;
-  }, [projects, pendingCharges]);
+  }, [activeProject, pendingCharges]);
 
   const lineItems = useMemo(() => {
-    const unsettledMsgs = projects.flatMap((p) =>
-      p.messages.filter(
-        (m) => m.role === "assistant" && m.cost !== undefined && !m.settled
-      )
-    );
+    const unsettledMsgs = activeProject
+      ? activeProject.messages.filter(
+          (m) => m.role === "assistant" && m.cost !== undefined && !m.settled
+        )
+      : [];
     const totalMsgCost = unsettledMsgs.reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const msgCount = unsettledMsgs.length;
 
@@ -54,7 +59,7 @@ export function SettlePill() {
       });
     }
 
-    for (const c of pendingCharges) {
+    for (const c of pendingCharges.filter((c) => c.workspaceId === activeProject?.id)) {
       items.push({
         id: c.id,
         title: c.title,
@@ -66,7 +71,7 @@ export function SettlePill() {
     }
 
     return items;
-  }, [projects, pendingCharges]);
+  }, [activeProject, pendingCharges]);
 
   const handleSettle = async () => {
     const result = await settleAll();

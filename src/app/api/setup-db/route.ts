@@ -53,6 +53,9 @@ create table if not exists chat_sessions (
   today_tokens_out integer default 0,
   today_message_count integer default 0,
   today_date text,
+  daily_limit numeric,
+  monthly_limit numeric,
+  per_txn_limit numeric,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -100,6 +103,22 @@ create table if not exists decisions (
   updated_at timestamptz default now()
 );
 
+-- Settlement history
+create table if not exists settlement_history (
+  id text primary key,
+  user_id text not null references meter_users(id) on delete cascade,
+  workspace_id text,
+  amount numeric not null,
+  stripe_payment_intent_id text,
+  tx_hash text,
+  message_count integer default 0,
+  charge_count integer default 0,
+  card_last4 text,
+  card_brand text,
+  status text not null default 'succeeded',
+  created_at timestamptz default now()
+);
+
 -- OAuth tokens (encrypted)
 create table if not exists oauth_tokens (
   id text primary key,
@@ -134,6 +153,14 @@ create index if not exists idx_chat_messages_session on chat_messages(session_id
 create index if not exists idx_chat_sessions_user on chat_sessions(user_id);
 create index if not exists idx_workspaces_user on workspaces(user_id);
 create index if not exists idx_decisions_user on decisions(user_id);
+create index if not exists idx_settlement_history_user on settlement_history(user_id);
+create index if not exists idx_settlement_history_workspace on settlement_history(workspace_id);
+
+-- Alter statements for existing deployments
+alter table chat_sessions add column if not exists daily_limit numeric;
+alter table chat_sessions add column if not exists monthly_limit numeric;
+alter table chat_sessions add column if not exists per_txn_limit numeric;
+alter table settlement_history add column if not exists workspace_id text;
 `;
 
 // Extract project ref from Supabase URL (e.g. "yzjevhsacvqbcygbmewk" from "https://yzjevhsacvqbcygbmewk.supabase.co")

@@ -4,6 +4,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 export interface Company {
   id: string;
   name: string;
+  sessionId?: string;
   createdAt: number;
 }
 
@@ -21,10 +22,14 @@ interface WorkspaceState {
   activeProjectId: string | null;
 
   // Combined create+activate actions (single set call, no cascading renders)
-  createCompany: (name: string) => string;
+  createCompany: (name: string, sessionId?: string) => string;
   createProject: (companyId: string, name: string) => string;
   setActiveCompany: (id: string) => void;
   setActiveProject: (id: string | null) => void;
+  upsertCompaniesFromSessions: (
+    sessions: Array<{ id: string; project_name?: string; name?: string; created_at?: string }>,
+    activeSessionId?: string
+  ) => void;
 }
 
 function generateId() {
@@ -40,10 +45,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       activeProjectId: null,
 
       // Add company AND activate it in a single set() — no cascading renders
-      createCompany: (name: string) => {
+      createCompany: (name: string, sessionId?: string) => {
         const id = generateId();
+        const session = sessionId ?? `ws_${generateId()}`;
         set((s) => ({
-          companies: [...s.companies, { id, name, createdAt: Date.now() }],
+          companies: [...s.companies, { id, name, sessionId: session, createdAt: Date.now() }],
           activeCompanyId: id,
           activeProjectId: null,
         }));
@@ -66,6 +72,55 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       setActiveProject: (id: string | null) => {
         set({ activeProjectId: id });
+      },
+
+      upsertCompaniesFromSessions: (sessions, activeSessionId) => {
+        if (!sessions || sessions.length === 0) return;
+        set((s) => {
+          const companies = [...s.companies];
+          const norm = (v: string) => v.toLowerCase();
+
+          for (const session of sessions) {
+            const sessionId = session.id;
+            const name = session.project_name ?? session.name ?? session.id;
+            const createdAtRaw = session.created_at ? Date.parse(session.created_at) : NaN;
+            const createdAt = Number.isFinite(createdAtRaw) ? createdAtRaw : Date.now();
+
+            let idx = companies.findIndex((c) => c.sessionId === sessionId);
+            if (idx === -1) {
+              idx = companies.findIndex(
+                (c) => !c.sessionId && norm(c.name) === norm(name)
+              );
+            }
+
+            if (idx === -1) {
+              companies.push({
+                id: generateId(),
+                name,
+                sessionId,
+                createdAt,
+              });
+            } else {
+              const existing = companies[idx];
+              companies[idx] = {
+                ...existing,
+                name,
+                sessionId: existing.sessionId ?? sessionId,
+              };
+            }
+          }
+
+          let activeCompanyId = s.activeCompanyId;
+          if (activeSessionId) {
+            const active = companies.find((c) => c.sessionId === activeSessionId);
+            if (active) activeCompanyId = active.id;
+          }
+          if (!activeCompanyId && companies.length > 0) {
+            activeCompanyId = companies[0].id;
+          }
+
+          return { companies, activeCompanyId };
+        });
       },
     }),
     {

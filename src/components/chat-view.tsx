@@ -5,6 +5,7 @@ import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
+import { ProfileSettings } from "@/components/profile-settings";
 import { ActionCard } from "@/components/action-card";
 import { ApproveButton } from "@/components/approve-button";
 import { ConnectorsBar } from "@/components/connectors-bar";
@@ -198,7 +199,7 @@ export function ChatView() {
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
 
   const userId = useMeterStore((s) => s.userId);
-  const chatBlocked = useMeterStore((s) => s.chatBlocked);
+  const chatBlocked = activeProject?.chatBlocked ?? false;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -211,6 +212,7 @@ export function ChatView() {
   const [rerouting, setRerouting] = useState<{ provider: string; toModel: string } | null>(null);
   const [logoMenuOpen, setLogoMenuOpen] = useState(false);
   const logoMenuRef = useRef<HTMLDivElement>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const isNearBottomRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
@@ -451,6 +453,7 @@ export function ChatView() {
                   choice: d.choice,
                   alternatives: d.alternatives,
                   reasoning: d.reasoning ?? undefined,
+                  projectId: activeProjectId,
                 });
                 useMeterStore.getState().setMessageDecisionId(decId);
               }
@@ -526,6 +529,7 @@ export function ChatView() {
 
   return (
     <div className="flex h-screen bg-background">
+      <ProfileSettings open={profileOpen} onClose={() => setProfileOpen(false)} />
       {switchingProjectName && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 backdrop-blur-sm">
           <div className="rounded-2xl border border-border bg-card px-8 py-6 text-center shadow-xl">
@@ -554,13 +558,14 @@ export function ChatView() {
             {logoMenuOpen && (
               <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xl border border-border bg-card shadow-xl py-1">
                 <button
-                  onClick={() => { setLogoMenuOpen(false); setInspectorOpen(true); setInspectorTab("controls"); }}
+                  onClick={() => { setLogoMenuOpen(false); setProfileOpen(true); }}
                   className="flex w-full items-center gap-2.5 px-3 py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
                   </svg>
-                  Controls
+                  Profile Settings
                 </button>
                 <div className="mx-2 my-1 h-px bg-border" />
                 <button
