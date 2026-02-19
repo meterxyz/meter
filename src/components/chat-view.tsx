@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
@@ -197,6 +197,25 @@ export function ChatView() {
   const isStreaming = activeProject?.isStreaming ?? false;
   const todayCost = activeProject?.todayCost ?? 0;
   const todayMessageCount = activeProject?.todayMessageCount ?? 0;
+
+  const decisions = useDecisionsStore((s) => s.decisions);
+  const updateDecision = useDecisionsStore((s) => s.updateDecision);
+
+  const meterProjectId = useMemo(() => {
+    const meterProject = projects.find(
+      (p) => p.id === "meter" || p.name?.toLowerCase() === "meter"
+    );
+    return meterProject?.id ?? null;
+  }, [projects]);
+
+  useEffect(() => {
+    if (!meterProjectId) return;
+    const unassigned = decisions.filter((d) => !d.projectId);
+    if (unassigned.length === 0) return;
+    unassigned.forEach((d) => {
+      updateDecision(d.id, { projectId: meterProjectId });
+    });
+  }, [decisions, meterProjectId, updateDecision]);
 
   const userId = useMeterStore((s) => s.userId);
   const chatBlocked = activeProject?.chatBlocked ?? false;
@@ -550,9 +569,10 @@ export function ChatView() {
               <svg
                 width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                className={`text-muted-foreground/40 transition-transform ${logoMenuOpen ? "rotate-180" : ""}`}
+                className="text-muted-foreground/40"
               >
-                <polyline points="6 9 12 15 18 9" />
+                <polyline points="7 10 12 5 17 10" />
+                <polyline points="7 14 12 19 17 14" />
               </svg>
             </button>
             {logoMenuOpen && (
