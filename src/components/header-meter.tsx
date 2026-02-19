@@ -81,21 +81,26 @@ export function HeaderMeter() {
   const usage = useMemo(() => {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
-    const startOfDay = now - (now % dayMs);
-    const weekAgo = now - 7 * dayMs;
-    const monthAgo = now - 30 * dayMs;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDayTs = startOfDay.getTime();
+    const weekStart = startOfWeek();
+    const monthStart = startOfMonth();
 
-    const today = assistantMsgs
-      .filter((m) => (m.timestamp ?? 0) >= startOfDay)
-      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const today = activeProject?.todayCost ?? 0;
     const week = assistantMsgs
-      .filter((m) => (m.timestamp ?? 0) >= weekAgo)
+      .filter((m) => (m.timestamp ?? 0) >= weekStart)
       .reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const month = assistantMsgs
-      .filter((m) => (m.timestamp ?? 0) >= monthAgo)
+      .filter((m) => (m.timestamp ?? 0) >= monthStart)
       .reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const lifetimeFromMessages = assistantMsgs.reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const lifetime = Math.max(lifetimeFromMessages, activeProject?.totalCost ?? 0);
+
+    const daysIntoWeek = Math.max(1, Math.floor((startOfDayTs - weekStart) / dayMs) + 1);
+    const daysIntoMonth = Math.max(1, new Date().getDate());
+    const weekAvg = week / daysIntoWeek;
+    const monthAvg = month / daysIntoMonth;
 
     const totalTokensIn = assistantMsgs.reduce((sum, m) => sum + (m.tokensIn ?? 0), 0);
     const totalTokensOut = assistantMsgs.reduce((sum, m) => sum + (m.tokensOut ?? 0), 0);
@@ -115,6 +120,8 @@ export function HeaderMeter() {
       week,
       month,
       lifetime,
+      weekAvg,
+      monthAvg,
       totalTokensIn,
       totalTokensOut,
       totalMessages,
@@ -122,7 +129,7 @@ export function HeaderMeter() {
       pendingCount,
       byModel,
     };
-  }, [assistantMsgs, activeProject?.totalCost]);
+  }, [assistantMsgs, activeProject?.totalCost, activeProject?.todayCost]);
 
   const animatedLifetime = useAnimatedNumber(usage.lifetime);
   const costStr = isStreaming
@@ -197,8 +204,8 @@ export function HeaderMeter() {
             </div>
             <div className="space-y-1.5">
               <SpendRow label="Today" amount={usage.today} />
-              <SpendRow label="This week" amount={usage.week} />
-              <SpendRow label="This month" amount={usage.month} />
+              <SpendRow label="This week" amount={usage.week} subLabel={`Avg/day $${usage.weekAvg.toFixed(2)}`} />
+              <SpendRow label="This month" amount={usage.month} subLabel={`Avg/day $${usage.monthAvg.toFixed(2)}`} />
               <SpendRow label="Lifetime" amount={usage.lifetime} />
             </div>
           </div>
@@ -249,10 +256,15 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SpendRow({ label, amount }: { label: string; amount: number }) {
+function SpendRow({ label, amount, subLabel }: { label: string; amount: number; subLabel?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="font-mono text-[12px] text-muted-foreground/70">{label}</span>
+      <div className="flex flex-col">
+        <span className="font-mono text-[12px] text-muted-foreground/70">{label}</span>
+        {subLabel && (
+          <span className="font-mono text-[10px] text-muted-foreground/40">{subLabel}</span>
+        )}
+      </div>
       <span className="font-mono text-[12px] tabular-nums text-foreground">
         ${amount.toFixed(2)}
       </span>

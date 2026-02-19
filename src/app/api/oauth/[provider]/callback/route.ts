@@ -6,64 +6,73 @@ import {
   storeToken,
 } from "@/lib/oauth";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ provider: string }> }
 ) {
-  const { provider: providerId } = await params;
-  const code = req.nextUrl.searchParams.get("code");
-  const state = req.nextUrl.searchParams.get("state");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
-
-  if (!code || !state) {
-    return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
-  }
-
-  const provider = OAUTH_PROVIDERS[providerId];
-  if (!provider || provider.type !== "oauth") {
-    return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
-  }
-
-  // Validate state (CSRF protection)
-  const supabase = getSupabaseServer();
-  const { data: stateRecord } = await supabase
-    .from("oauth_state")
-    .select("*")
-    .eq("id", state)
-    .eq("provider", providerId)
-    .single();
-
-  if (!stateRecord) {
-    return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
-  }
-
-  // Check expiry
-  if (new Date(stateRecord.expires_at) < new Date()) {
-    await supabase.from("oauth_state").delete().eq("id", state);
-    return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
-  }
-
-  const userId = stateRecord.user_id;
-
-  // Clean up state record
-  await supabase.from("oauth_state").delete().eq("id", state);
-
   try {
-    const redirectUri = `${appUrl}/api/oauth/${providerId}/callback`;
-    const tokenData = await exchangeCodeForToken(provider, code, redirectUri);
-    await storeToken(userId, providerId, tokenData);
+    const { provider: providerId } = await params;
+    const code = req.nextUrl.searchParams.get("code");
+    const state = req.nextUrl.searchParams.get("state");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
 
-    // Backward compat: update gmail_connected field
-    if (providerId === "gmail") {
-      await supabase
-        .from("meter_users")
-        .update({ gmail_connected: true })
-        .eq("id", userId);
+    if (!code || !state) {
+      return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
     }
 
-    return NextResponse.redirect(`${appUrl}/?oauth=success&provider=${providerId}`);
+    const provider = OAUTH_PROVIDERS[providerId];
+    if (!provider || provider.type !== "oauth") {
+      return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
+    }
+
+    // Validate state (CSRF protection)
+    const supabase = getSupabaseServer();
+    const { data: stateRecord } = await supabase
+      .from("oauth_state")
+      .select("*")
+      .eq("id", state)
+      .eq("provider", providerId)
+      .single();
+
+    if (!stateRecord) {
+      return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
+    }
+
+    // Check expiry
+    if (new Date(stateRecord.expires_at) < new Date()) {
+      await supabase.from("oauth_state").delete().eq("id", state);
+      return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
+    }
+
+    const userId = stateRecord.user_id;
+
+    // Clean up state record
+    await supabase.from("oauth_state").delete().eq("id", state);
+
+    try {
+      const redirectUri = `${appUrl}/api/oauth/${providerId}/callback`;
+      const tokenData = await exchangeCodeForToken(provider, code, redirectUri);
+      await storeToken(userId, providerId, tokenData);
+
+      // Backward compat: update gmail_connected field
+      if (providerId === "gmail") {
+        await supabase
+          .from("meter_users")
+          .update({ gmail_connected: true })
+          .eq("id", userId);
+      }
+
+      return NextResponse.redirect(`${appUrl}/?oauth=success&provider=${providerId}`);
+    } catch (err) {
+      console.error(`OAuth callback error for ${providerId}:`, err);
+      return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
+    }
   } catch (err) {
-    console.error(`OAuth callback error for ${providerId}:`, err);
-    return NextResponse.redirect(`${appUrl}/?oauth=error&provider=${providerId}`);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("OAuth callback error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

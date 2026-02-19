@@ -168,11 +168,17 @@ interface MeterState {
   fetchSpendLimits: (workspaceId?: string) => Promise<void>;
   updateSpendLimits: (limits: Partial<SpendLimits>, workspaceId?: string) => Promise<void>;
 
+  resetDailyIfNeeded: () => void;
+
   reset: () => void;
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function createProject(id: string, name: string): ProjectThread {
@@ -772,6 +778,17 @@ export const useMeterStore = create<MeterState>()(
           });
         } catch { /* silent */ }
       },
+
+      resetDailyIfNeeded: () =>
+        set((s) => {
+          let changed = false;
+          const projects = s.projects.map((p) => {
+            const next = ensureDaily(p);
+            if (next !== p) changed = true;
+            return next;
+          });
+          return changed ? { projects } : {};
+        }),
 
       setPendingInput: (v) => set({ pendingInput: v }),
 

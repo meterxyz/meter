@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useWorkspaceStore } from "@/lib/workspace-store";
-import { useMeterStore } from "@/lib/store";
 import { CompanySwitcher } from "./company-switcher";
 import { ProjectSwitcher } from "./project-switcher";
 import { CardSwitcher } from "./card-switcher";
@@ -13,8 +12,6 @@ export function WorkspaceBar() {
   const projects = useWorkspaceStore((s) => s.projects);
   const activeCompanyId = useWorkspaceStore((s) => s.activeCompanyId);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
-  const cardLast4 = useMeterStore((s) => s.cardLast4);
-
   const activeCompany = useMemo(
     () => companies.find((c) => c.id === activeCompanyId) ?? null,
     [companies, activeCompanyId]
@@ -61,7 +58,7 @@ export function WorkspaceBar() {
       </div>
 
       {/* Right: Card switcher */}
-      <CardSwitcher cardLast4={cardLast4} />
+      <CardSwitcher />
     </div>
   );
 }

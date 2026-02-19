@@ -410,12 +410,13 @@ function DecisionsTab({ activeProjectId }: { activeProjectId: string | null }) {
 }
 
 /* ─── CARD VISUAL ─── */
-const CARD_BACKGROUND = "from-zinc-950/70 via-zinc-900/70 to-zinc-800/60";
+const CARD_BACKGROUND = "from-zinc-950 via-zinc-900 to-zinc-800";
 
-function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
+function CardVisual({ card, index, isTop, isSwitching, onClick, onRemove, canRemove }: {
   card: PaymentCard;
   index: number;
   isTop: boolean;
+  isSwitching: boolean;
   onClick: () => void;
   onRemove?: () => void;
   canRemove: boolean;
@@ -426,9 +427,9 @@ function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
       onClick={onClick}
       className={`relative w-full max-w-[320px] aspect-[1.586/1] mx-auto rounded-2xl p-4 bg-gradient-to-br ${CARD_BACKGROUND} border border-white/10 cursor-pointer transition-all duration-200 ${
         isTop ? "shadow-lg" : "hover:-translate-y-1 shadow-md"
-      }`}
+      } ${isSwitching ? "ring-2 ring-emerald-400/60 scale-[1.02]" : ""}`}
       style={{
-        marginTop: index > 0 ? "-44px" : undefined,
+        marginTop: index > 0 ? "-60px" : undefined,
         zIndex: isTop ? 10 : 10 - index,
       }}
     >
@@ -482,6 +483,7 @@ function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [settleSuccess, setSettleSuccess] = useState(false);
+  const [switchingCardId, setSwitchingCardId] = useState<string | null>(null);
   const workspaceId = activeProject?.id ?? null;
 
   useEffect(() => {
@@ -503,7 +505,7 @@ function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
     }
   };
 
-  const canRemoveCards = cards.length > 1 || getPendingBalance() <= 0;
+  const canRemoveCards = cards.length > 1;
 
   const pendingBalance = getPendingBalance();
   const brandLabel = cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : "Card";
@@ -515,6 +517,13 @@ function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
       setSettleSuccess(true);
       setTimeout(() => setSettleSuccess(false), 2000);
     }
+  };
+
+  const handleSetDefault = async (cardId: string) => {
+    if (!cardId) return;
+    setSwitchingCardId(cardId);
+    await setDefaultCard(cardId);
+    setTimeout(() => setSwitchingCardId(null), 1200);
   };
 
   return (
@@ -579,7 +588,8 @@ function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
                 card={card}
                 index={i}
                 isTop={i === 0}
-                onClick={() => { if (!card.isDefault) setDefaultCard(card.id); }}
+                isSwitching={switchingCardId === card.id}
+                onClick={() => { if (!card.isDefault) handleSetDefault(card.id); }}
                 onRemove={() => handleRemove(card.id)}
                 canRemove={canRemoveCards}
               />

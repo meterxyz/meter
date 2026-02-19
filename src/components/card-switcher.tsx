@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useMeterStore } from "@/lib/store";
 
-interface CardSwitcherProps {
-  cardLast4: string | null;
-}
-
-export function CardSwitcher({ cardLast4 }: CardSwitcherProps) {
+export function CardSwitcher() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const cards = useMeterStore((s) => s.cards);
+  const cardsLoading = useMeterStore((s) => s.cardsLoading);
+  const fetchCards = useMeterStore((s) => s.fetchCards);
+  const setDefaultCard = useMeterStore((s) => s.setDefaultCard);
+  const cardLast4 = useMeterStore((s) => s.cardLast4);
 
   // Close on outside click
   useEffect(() => {
@@ -22,7 +24,20 @@ export function CardSwitcher({ cardLast4 }: CardSwitcherProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  if (!cardLast4) return null;
+  useEffect(() => {
+    if (!open) return;
+    if (cards.length === 0 && !cardsLoading) {
+      fetchCards();
+    }
+  }, [open, cards.length, cardsLoading, fetchCards]);
+
+  const defaultCard = useMemo(
+    () => cards.find((c) => c.isDefault) ?? cards[0] ?? null,
+    [cards]
+  );
+
+  const displayLast4 = defaultCard?.last4 ?? cardLast4;
+  if (!displayLast4) return null;
 
   return (
     <div ref={ref} className="relative ml-auto">
@@ -34,7 +49,7 @@ export function CardSwitcher({ cardLast4 }: CardSwitcherProps) {
           <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
           <line x1="1" y1="10" x2="23" y2="10" />
         </svg>
-        <span>{cardLast4}</span>
+        <span>{displayLast4}</span>
         <svg
           width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -49,16 +64,37 @@ export function CardSwitcher({ cardLast4 }: CardSwitcherProps) {
           <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider px-2 py-1">
             Cards
           </div>
-          {/* Active billing card */}
-          <div className="flex w-full items-center gap-2 rounded-md bg-foreground/10 px-2 py-1.5 font-mono text-[11px] text-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {cardLast4}
-            <span className="ml-auto text-[10px] text-muted-foreground/60">Billing</span>
-          </div>
-          {/* Future: payment cards, agent virtual cards */}
-          <div className="mt-1 px-2 py-1.5 font-mono text-[10px] text-muted-foreground/30">
-            Payment &amp; agent cards coming soon
-          </div>
+          {cardsLoading && cards.length === 0 ? (
+            <div className="px-2 py-2 font-mono text-[10px] text-muted-foreground/40">
+              Loading cards...
+            </div>
+          ) : cards.length === 0 ? (
+            <div className="px-2 py-2 font-mono text-[10px] text-muted-foreground/40">
+              No cards on file
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {cards.map((card) => {
+                const brandLabel = card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => { if (!card.isDefault) setDefaultCard(card.id); }}
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 font-mono text-[11px] transition-colors ${
+                      card.isDefault ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                    }`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${card.isDefault ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                    <span className="tabular-nums">{card.last4}</span>
+                    <span className="text-[10px] text-muted-foreground/60">{brandLabel}</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground/60">
+                      {String(card.expMonth).padStart(2, "0")}/{String(card.expYear).slice(-2)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
