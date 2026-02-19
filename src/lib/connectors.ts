@@ -333,6 +333,43 @@ export const CONNECTORS: ConnectorDef[] = [
       },
     ],
   },
+  {
+    id: "posthog",
+    name: "PostHog",
+    connectionType: "api_key",
+    description: "product analytics & events",
+    iconPath:
+      "M3 3v18h18V3H3zm2 16V5h2v14H5zm4 0V5h2v14H9zm4 0V9h2v10h-2zm4 0v-6h2v6h-2z",
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "posthog_query_events",
+          description: "Query recent events from PostHog. Use to look up user activity, pageviews, or custom events.",
+          parameters: {
+            type: "object",
+            properties: {
+              event: { type: "string", description: "Event name to filter by (e.g. '$pageview', 'signup')" },
+              limit: { type: "number", description: "Max results to return (default 10)" },
+            },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "posthog_get_insights",
+          description: "List saved insights (charts, funnels, trends) from PostHog.",
+          parameters: {
+            type: "object",
+            properties: {
+              limit: { type: "number", description: "Max results to return (default 10)" },
+            },
+          },
+        },
+      },
+    ],
+  },
 ];
 
 /** Get a connector definition by id */

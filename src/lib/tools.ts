@@ -206,6 +206,8 @@ export async function executeTool(
     case "ramp_get_spending_summary":
     case "supabase_query":
     case "supabase_list_tables":
+    case "posthog_query_events":
+    case "posthog_get_insights":
       return `[${name}] This connector tool is not yet implemented. The service needs to be fully connected first.`;
     default:
       return `Unknown tool: ${name}`;
