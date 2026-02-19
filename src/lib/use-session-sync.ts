@@ -12,6 +12,44 @@ export function useSessionSync() {
   const authenticated = useMeterStore((s) => s.authenticated);
   const lastSyncRef = useRef<string>("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+
+  const mapServerMessage = (m: Record<string, unknown>) => ({
+    id: m.id as string,
+    role: m.role as "user" | "assistant",
+    content: (m.content as string) ?? "",
+    model: m.model as string | undefined,
+    tokensIn: m.tokens_in as number | undefined,
+    tokensOut: m.tokens_out as number | undefined,
+    cost: m.cost as number | undefined,
+    confidence: m.confidence as number | undefined,
+    settled: m.settled as boolean | undefined,
+    receiptStatus: m.receipt_status as string | undefined,
+    signature: m.signature as string | undefined,
+    txHash: m.tx_hash as string | undefined,
+    cards: m.cards as unknown,
+    timestamp: m.timestamp as number,
+  });
+
+  const buildProjectFromSession = (session: Record<string, unknown>) => {
+    const messages = Array.isArray(session.messages)
+      ? session.messages.map((m: Record<string, unknown>) => mapServerMessage(m))
+      : [];
+
+    return {
+      id: session.id as string,
+      name: (session.project_name as string) ?? (session.name as string) ?? (session.id as string),
+      messages,
+      isStreaming: false,
+      todayCost: Number(session.today_cost ?? 0),
+      todayTokensIn: Number(session.today_tokens_in ?? 0),
+      todayTokensOut: Number(session.today_tokens_out ?? 0),
+      todayMessageCount: Number(session.today_message_count ?? 0),
+      todayByModel: {},
+      todayDate: (session.today_date as string) ?? todayStr(),
+      totalCost: Number(session.total_cost ?? 0),
+    };
+  };
 
   const syncToServer = useCallback(async () => {
     if (!userId || !authenticated) return;
@@ -27,14 +65,14 @@ export function useSessionSync() {
     );
 
     if (snapshot === lastSyncRef.current) return;
-    lastSyncRef.current = snapshot;
+    let allOk = true;
 
     // Sync each project as a session
     for (const project of projects) {
       if (project.messages.length === 0) continue;
 
       try {
-        await fetch("/api/sessions", {
+        const res = await fetch("/api/sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -52,9 +90,17 @@ export function useSessionSync() {
             messages: project.messages,
           }),
         });
+        if (!res.ok) {
+          allOk = false;
+        }
       } catch {
         // Silent fail — will retry on next interval
+        allOk = false;
       }
+    }
+
+    if (allOk) {
+      lastSyncRef.current = snapshot;
     }
   }, [userId, authenticated, projects]);
 
@@ -124,47 +170,51 @@ export function useSessionSync() {
         if (cancelled || !data.sessions?.length) return;
 
         const store = useMeterStore.getState();
+        const serverSessions = data.sessions as Record<string, unknown>[];
 
-        // For each server session, restore messages if local is empty
-        for (const serverSession of data.sessions) {
-          const localProject = store.projects.find((p) => p.id === serverSession.id);
-          if (localProject && localProject.messages.length === 0 && serverSession.messages.length > 0) {
-            // Restore messages from server
-            const messages = serverSession.messages.map((m: Record<string, unknown>) => ({
-              id: m.id as string,
-              role: m.role as string,
-              content: m.content as string,
-              model: m.model as string | undefined,
-              tokensIn: m.tokens_in as number | undefined,
-              tokensOut: m.tokens_out as number | undefined,
-              cost: m.cost as number | undefined,
-              confidence: m.confidence as number | undefined,
-              settled: m.settled as boolean | undefined,
-              receiptStatus: m.receipt_status as string | undefined,
-              signature: m.signature as string | undefined,
-              txHash: m.tx_hash as string | undefined,
-              cards: m.cards as unknown,
-              timestamp: m.timestamp as number,
-            }));
-
-            // Directly update the store
+        const hasLocalMessages = store.projects.some((p) => p.messages.length > 0);
+        if (!hasLocalMessages) {
+          const serverProjects = serverSessions.map((s) => buildProjectFromSession(s));
+          if (serverProjects.length > 0) {
             useMeterStore.setState((s) => ({
-              projects: s.projects.map((p) =>
-                p.id === serverSession.id
-                  ? {
-                      ...p,
-                      messages,
-                      totalCost: serverSession.total_cost ?? p.totalCost,
-                      todayCost: serverSession.today_cost ?? p.todayCost,
-                      todayTokensIn: serverSession.today_tokens_in ?? p.todayTokensIn,
-                      todayTokensOut: serverSession.today_tokens_out ?? p.todayTokensOut,
-                      todayMessageCount: serverSession.today_message_count ?? p.todayMessageCount,
-                      todayDate: serverSession.today_date ?? p.todayDate,
-                    }
-                  : p
-              ),
+              projects: serverProjects,
+              activeProjectId: serverProjects.some((p) => p.id === s.activeProjectId)
+                ? s.activeProjectId
+                : serverProjects[0].id,
             }));
           }
+          return;
+        }
+
+        const localById = new Map(store.projects.map((p) => [p.id, p]));
+        const merged = [...store.projects];
+        let changed = false;
+
+        for (const serverSession of serverSessions) {
+          const serverId = serverSession.id as string;
+          const localProject = localById.get(serverId);
+          if (!localProject) {
+            merged.push(buildProjectFromSession(serverSession));
+            changed = true;
+            continue;
+          }
+
+          if (localProject.messages.length === 0 && Array.isArray(serverSession.messages) && serverSession.messages.length > 0) {
+            const idx = merged.findIndex((p) => p.id === serverId);
+            if (idx >= 0) {
+              merged[idx] = buildProjectFromSession(serverSession);
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) {
+          useMeterStore.setState((s) => ({
+            projects: merged,
+            activeProjectId: merged.some((p) => p.id === s.activeProjectId)
+              ? s.activeProjectId
+              : merged[0]?.id ?? s.activeProjectId,
+          }));
         }
       } catch {
         // Silent fail — localStorage still works as fallback
