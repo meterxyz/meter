@@ -37,16 +37,18 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
   const [switchingName, setSwitchingName] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
 
-  const switchToChatThread = (name: string) => {
-    const threadId = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    // Create thread if it doesn't exist
-    if (!chatProjects.some((p) => p.id === threadId)) {
-      addProject(name);
+  const ensureSession = (sessionId: string, name: string) => {
+    if (!chatProjects.some((p) => p.id === sessionId)) {
+      addProject(name, sessionId);
     }
+  };
+
+  const switchToChatThread = (sessionId: string, name: string) => {
+    ensureSession(sessionId, name);
     // Show splash with animated log lines
     setSwitchingName(name);
     setLogLines([]);
-    setActiveProjectChat(threadId);
+    setActiveProjectChat(sessionId);
 
     const lines = [
       `loading workspace "${name}"...`,
@@ -72,14 +74,18 @@ export function CompanySwitcher({ activeCompany }: CompanySwitcherProps) {
     const company = companies.find((c) => c.id === id);
     setActiveCompany(id);
     setOpen(false);
-    if (company) switchToChatThread(company.name);
+    if (company) {
+      const sessionId = company.sessionId ?? company.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      switchToChatThread(sessionId, company.name);
+    }
   };
 
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    createCompany(name);
-    switchToChatThread(name);
+    const sessionId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    createCompany(name, sessionId);
+    switchToChatThread(sessionId, name);
     setNewName("");
     setCreating(false);
     setOpen(false);

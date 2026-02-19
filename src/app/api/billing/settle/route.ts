@@ -5,10 +5,10 @@ import { batchSettle, SettlementItem } from "@/lib/base";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, stripeCustomerId, amount, messageIds, chargeIds } = await req.json();
+    const { userId, stripeCustomerId, workspaceId, amount, messageIds, chargeIds } = await req.json();
 
-    if (!userId || !amount || amount <= 0) {
-      return NextResponse.json({ error: "userId and positive amount required" }, { status: 400 });
+    if (!userId || !workspaceId || !amount || amount <= 0) {
+      return NextResponse.json({ error: "userId, workspaceId, and positive amount required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       description: `Meter settlement — ${(messageIds?.length ?? 0)} messages, ${(chargeIds?.length ?? 0)} card charges`,
       metadata: {
         meter_user_id: userId,
+        workspace_id: workspaceId,
         message_count: String(messageIds?.length ?? 0),
         charge_count: String(chargeIds?.length ?? 0),
       },
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
     await supabase.from("settlement_history").insert({
       id: historyId,
       user_id: userId,
+      workspace_id: workspaceId,
       amount,
       stripe_payment_intent_id: paymentIntent.id,
       tx_hash: txHash ?? null,

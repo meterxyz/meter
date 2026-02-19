@@ -44,6 +44,7 @@ export interface PaymentCard {
 export interface SettlementRecord {
   id: string;
   amount: number;
+  workspaceId?: string;
   stripePaymentIntentId?: string;
   txHash?: string;
   messageCount: number;
@@ -65,6 +66,8 @@ interface ProjectThread {
   name: string;
   messages: ChatMessage[];
   isStreaming: boolean;
+  settlementError: string | null;
+  chatBlocked: boolean;
   todayCost: number;
   todayTokensIn: number;
   todayTokensOut: number;
@@ -92,11 +95,16 @@ interface MeterState {
   projects: ProjectThread[];
   activeProjectId: string;
 
-  pendingCharges: { id: string; title: string; cost: number; type: "usage" | "card"; paidAt?: number }[];
+  pendingCharges: {
+    id: string;
+    title: string;
+    cost: number;
+    type: "usage" | "card";
+    workspaceId: string;
+    paidAt?: number;
+  }[];
   autoSettleThreshold: number;
   isSettling: boolean;
-  settlementError: string | null;
-  chatBlocked: boolean;
 
   pendingInput: string | null;
 
@@ -121,7 +129,7 @@ interface MeterState {
   submitApiKey: (provider: string, apiKey: string) => Promise<boolean>;
   logout: () => void;
 
-  addProject: (name: string) => void;
+  addProject: (name: string, id?: string) => void;
   setActiveProject: (id: string) => void;
 
   addMessage: (msg: ChatMessage) => void;
@@ -155,10 +163,10 @@ interface MeterState {
   setDefaultCard: (paymentMethodId: string) => Promise<void>;
   removeCard: (paymentMethodId: string) => Promise<{ success: boolean; error?: string }>;
 
-  fetchSettlementHistory: () => Promise<void>;
+  fetchSettlementHistory: (workspaceId?: string) => Promise<void>;
 
-  fetchSpendLimits: () => Promise<void>;
-  updateSpendLimits: (limits: Partial<SpendLimits>) => Promise<void>;
+  fetchSpendLimits: (workspaceId?: string) => Promise<void>;
+  updateSpendLimits: (limits: Partial<SpendLimits>, workspaceId?: string) => Promise<void>;
 
   reset: () => void;
 }
@@ -173,6 +181,8 @@ function createProject(id: string, name: string): ProjectThread {
     name,
     messages: [],
     isStreaming: false,
+    settlementError: null,
+    chatBlocked: false,
     todayCost: 0,
     todayTokensIn: 0,
     todayTokensOut: 0,
@@ -237,8 +247,6 @@ export const useMeterStore = create<MeterState>()(
       pendingCharges: [],
       autoSettleThreshold: 10,
       isSettling: false,
-      settlementError: null,
-      chatBlocked: false,
 
       cards: [],
       cardsLoading: false,
@@ -327,15 +335,13 @@ export const useMeterStore = create<MeterState>()(
           inspectorOpen: false,
           pendingCharges: [],
           isSettling: false,
-          settlementError: null,
-          chatBlocked: false,
         }),
 
-      addProject: (name) =>
+      addProject: (name, idOverride) =>
         set((s) => {
           const cleanName = name.trim();
           if (!cleanName) return s;
-          const id = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+          const id = idOverride ?? cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
           if (s.projects.some((p) => p.id === id)) return s;
           return { projects: [...s.projects, createProject(id, cleanName)] };
         }),
@@ -466,31 +472,49 @@ export const useMeterStore = create<MeterState>()(
 
       getPendingBalance: () => {
         const s = get();
-        const msgCost = s.projects
-          .flatMap((p) => p.messages)
+        const active = getActiveProject(s);
+        if (!active) return 0;
+        const msgCost = active.messages
           .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled)
           .reduce((sum, m) => sum + (m.cost ?? 0), 0);
-        const cardCost = s.pendingCharges.reduce((sum, c) => sum + c.cost, 0);
+        const cardCost = s.pendingCharges
+          .filter((c) => c.workspaceId === active.id)
+          .reduce((sum, c) => sum + c.cost, 0);
         return msgCost + cardCost;
       },
 
       getUnsettledMessages: () => {
         const s = get();
-        return s.projects
-          .flatMap((p) => p.messages)
+        const active = getActiveProject(s);
+        if (!active) return [];
+        return active.messages
           .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled);
       },
 
       settleAll: async () => {
         const s = get();
         if (s.isSettling) return { success: false, error: "Already settling" };
-        set({ isSettling: true, settlementError: null });
+        set((prev) => {
+          const active = getActiveProject(prev);
+          if (!active) return { isSettling: true };
+          return {
+            isSettling: true,
+            projects: replaceActiveProject(prev, { ...active, settlementError: null }),
+          };
+        });
 
-        const unsettledMsgs = s.projects
-          .flatMap((p) => p.messages)
+        const active = getActiveProject(s);
+        if (!active) {
+          set({ isSettling: false });
+          return { success: false, error: "No active workspace" };
+        }
+
+        const unsettledMsgs = active.messages
           .filter((m) => m.role === "assistant" && m.cost !== undefined && !m.settled);
         const messageIds = unsettledMsgs.map((m) => m.id);
-        const chargeIds = s.pendingCharges.map((c) => c.id);
+        const chargeIds = s.pendingCharges
+          .filter((c) => c.workspaceId === active.id)
+          .map((c) => c.id);
         const amount = s.getPendingBalance();
 
         if (amount <= 0) {
@@ -505,6 +529,7 @@ export const useMeterStore = create<MeterState>()(
             body: JSON.stringify({
               userId: s.userId,
               stripeCustomerId: s.stripeCustomerId,
+              workspaceId: active.id,
               amount,
               messageIds,
               chargeIds,
@@ -514,7 +539,18 @@ export const useMeterStore = create<MeterState>()(
           if (!res.ok) {
             const body = await res.json().catch(() => ({ error: "Settlement failed" }));
             const errorMsg = body.error ?? "Settlement failed";
-            set({ isSettling: false, settlementError: errorMsg, chatBlocked: true });
+            set((prev) => {
+              const current = getActiveProject(prev);
+              if (!current) return { isSettling: false };
+              return {
+                isSettling: false,
+                projects: replaceActiveProject(prev, {
+                  ...current,
+                  settlementError: errorMsg,
+                  chatBlocked: true,
+                }),
+              };
+            });
             return { success: false, error: errorMsg };
           }
 
@@ -522,9 +558,11 @@ export const useMeterStore = create<MeterState>()(
           const batchTxHash = data.txHash as string | undefined;
 
           set((prev) => {
-            const projects = prev.projects.map((p) => ({
-              ...p,
-              messages: p.messages.map((m) =>
+            const current = getActiveProject(prev);
+            if (!current) return { isSettling: false };
+            const updatedProject = {
+              ...current,
+              messages: current.messages.map((m) =>
                 messageIds.includes(m.id)
                   ? {
                       ...m,
@@ -534,13 +572,31 @@ export const useMeterStore = create<MeterState>()(
                     }
                   : m
               ),
-            }));
-            return { projects, pendingCharges: [], isSettling: false, settlementError: null, chatBlocked: false };
+              settlementError: null,
+              chatBlocked: false,
+            };
+            const remainingCharges = prev.pendingCharges.filter((c) => c.workspaceId !== current.id);
+            return {
+              projects: replaceActiveProject(prev, updatedProject),
+              pendingCharges: remainingCharges,
+              isSettling: false,
+            };
           });
           return { success: true };
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : "Settlement failed";
-          set({ isSettling: false, settlementError: errorMsg, chatBlocked: true });
+          set((prev) => {
+            const current = getActiveProject(prev);
+            if (!current) return { isSettling: false };
+            return {
+              isSettling: false,
+              projects: replaceActiveProject(prev, {
+                ...current,
+                settlementError: errorMsg,
+                chatBlocked: true,
+              }),
+            };
+          });
           return { success: false, error: errorMsg };
         }
       },
@@ -550,6 +606,7 @@ export const useMeterStore = create<MeterState>()(
 
         set((s) => {
           const active = getActiveProject(s);
+          if (!active) return s;
           const updated = {
             ...active,
             messages: active.messages.map((m) => {
@@ -563,7 +620,7 @@ export const useMeterStore = create<MeterState>()(
           const card = active.messages.find((m) => m.id === messageId)?.cards?.find((c) => c.id === cardId);
           const newCharge =
             card && card.cost
-              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost, type: "card" as const, paidAt: Date.now() }]
+              ? [...s.pendingCharges, { id: card.id, title: card.title, cost: card.cost, type: "card" as const, workspaceId: active.id, paidAt: Date.now() }]
               : s.pendingCharges;
           return { projects: replaceActiveProject(s, updated), pendingCharges: newCharge };
         });
@@ -609,7 +666,14 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, updated) };
         }),
 
-      clearSettlementError: () => set({ settlementError: null }),
+      clearSettlementError: () =>
+        set((s) => {
+          const active = getActiveProject(s);
+          if (!active) return s;
+          return {
+            projects: replaceActiveProject(s, { ...active, settlementError: null }),
+          };
+        }),
 
       fetchCards: async () => {
         const userId = get().userId;
@@ -665,12 +729,13 @@ export const useMeterStore = create<MeterState>()(
         }
       },
 
-      fetchSettlementHistory: async () => {
+      fetchSettlementHistory: async (workspaceId) => {
         const userId = get().userId;
-        if (!userId) return;
+        const projectId = workspaceId ?? get().activeProjectId;
+        if (!userId || !projectId) return;
         set({ settlementHistoryLoading: true });
         try {
-          const res = await fetch(`/api/billing/history?userId=${encodeURIComponent(userId)}`);
+          const res = await fetch(`/api/billing/history?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(projectId)}`);
           if (res.ok) {
             const data = await res.json();
             set({ settlementHistory: data.history ?? [] });
@@ -680,11 +745,12 @@ export const useMeterStore = create<MeterState>()(
         }
       },
 
-      fetchSpendLimits: async () => {
+      fetchSpendLimits: async (workspaceId) => {
         const userId = get().userId;
-        if (!userId) return;
+        const projectId = workspaceId ?? get().activeProjectId;
+        if (!userId || !projectId) return;
         try {
-          const res = await fetch(`/api/billing/spend-limits?userId=${encodeURIComponent(userId)}`);
+          const res = await fetch(`/api/billing/spend-limits?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(projectId)}`);
           if (res.ok) {
             const data = await res.json();
             set({ spendLimits: { dailyLimit: data.dailyLimit ?? null, monthlyLimit: data.monthlyLimit ?? null, perTxnLimit: data.perTxnLimit ?? null } });
@@ -692,16 +758,17 @@ export const useMeterStore = create<MeterState>()(
         } catch { /* silent */ }
       },
 
-      updateSpendLimits: async (limits) => {
+      updateSpendLimits: async (limits, workspaceId) => {
         const userId = get().userId;
-        if (!userId) return;
+        const projectId = workspaceId ?? get().activeProjectId;
+        if (!userId || !projectId) return;
         const merged = { ...get().spendLimits, ...limits };
         set({ spendLimits: merged });
         try {
           await fetch("/api/billing/spend-limits", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, ...merged }),
+            body: JSON.stringify({ userId, workspaceId: projectId, ...merged }),
           });
         } catch { /* silent */ }
       },
@@ -720,11 +787,15 @@ export const useMeterStore = create<MeterState>()(
 
       reset: () =>
         set((s) => ({
-          projects: s.projects.map((p) => ({ ...p, messages: [], isStreaming: false })),
+          projects: s.projects.map((p) => ({
+            ...p,
+            messages: [],
+            isStreaming: false,
+            settlementError: null,
+            chatBlocked: false,
+          })),
           pendingCharges: [],
           isSettling: false,
-          settlementError: null,
-          chatBlocked: false,
         })),
     }),
     {

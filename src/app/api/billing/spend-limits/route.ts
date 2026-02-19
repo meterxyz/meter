@@ -4,15 +4,17 @@ import { getSupabaseServer } from "@/lib/supabase";
 export async function GET(req: NextRequest) {
   try {
     const userId = req.nextUrl.searchParams.get("userId");
-    if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 });
+    const workspaceId = req.nextUrl.searchParams.get("workspaceId");
+    if (!userId || !workspaceId) {
+      return NextResponse.json({ error: "userId and workspaceId required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();
     const { data } = await supabase
-      .from("meter_users")
+      .from("chat_sessions")
       .select("daily_limit, monthly_limit, per_txn_limit")
-      .eq("id", userId)
+      .eq("id", workspaceId)
+      .eq("user_id", userId)
       .single();
 
     return NextResponse.json({
@@ -27,21 +29,22 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { userId, dailyLimit, monthlyLimit, perTxnLimit } = await req.json();
-    if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 });
+    const { userId, workspaceId, dailyLimit, monthlyLimit, perTxnLimit } = await req.json();
+    if (!userId || !workspaceId) {
+      return NextResponse.json({ error: "userId and workspaceId required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();
     await supabase
-      .from("meter_users")
+      .from("chat_sessions")
       .update({
         daily_limit: dailyLimit ?? null,
         monthly_limit: monthlyLimit ?? null,
         per_txn_limit: perTxnLimit ?? null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", userId);
+      .eq("id", workspaceId)
+      .eq("user_id", userId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

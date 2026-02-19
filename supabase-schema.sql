@@ -54,6 +54,9 @@ create table if not exists chat_sessions (
   today_tokens_out integer default 0,
   today_message_count integer default 0,
   today_date text,
+  daily_limit numeric,
+  monthly_limit numeric,
+  per_txn_limit numeric,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -152,6 +155,7 @@ create table if not exists usage_records (
 create table if not exists settlement_history (
   id text primary key,
   user_id text not null references meter_users(id) on delete cascade,
+  workspace_id text,
   amount numeric not null,
   stripe_payment_intent_id text,
   tx_hash text,
@@ -169,6 +173,14 @@ create table if not exists settlement_history (
 -- alter table meter_users add column if not exists monthly_limit numeric;
 -- alter table meter_users add column if not exists per_txn_limit numeric;
 
+-- Spend limit columns on chat_sessions (per workspace)
+-- alter table chat_sessions add column if not exists daily_limit numeric;
+-- alter table chat_sessions add column if not exists monthly_limit numeric;
+-- alter table chat_sessions add column if not exists per_txn_limit numeric;
+
+-- Workspace id on settlement history
+-- alter table settlement_history add column if not exists workspace_id text;
+
 -- =============================================
 -- INDEXES
 -- =============================================
@@ -183,3 +195,4 @@ create index if not exists idx_workspaces_user on workspaces(user_id);
 create index if not exists idx_workspace_projects_workspace on workspace_projects(workspace_id);
 create index if not exists idx_decisions_user on decisions(user_id);
 create index if not exists idx_settlement_history_user on settlement_history(user_id);
+create index if not exists idx_settlement_history_workspace on settlement_history(workspace_id);

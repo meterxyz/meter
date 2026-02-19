@@ -9,6 +9,7 @@ export function ApproveButton() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const projects = useMeterStore((s) => s.projects);
+  const activeProjectId = useMeterStore((s) => s.activeProjectId);
   const approveCard = useMeterStore((s) => s.approveCard);
   const rejectCard = useMeterStore((s) => s.rejectCard);
   const getPendingBalance = useMeterStore((s) => s.getPendingBalance);
@@ -19,25 +20,35 @@ export function ApproveButton() {
 
   const decisions = useDecisionsStore((s) => s.decisions);
   const undecided = useMemo(
-    () => decisions.filter((d) => d.status === "undecided" && !d.archived),
-    [decisions]
+    () =>
+      decisions.filter(
+        (d) =>
+          d.status === "undecided" &&
+          !d.archived &&
+          d.projectId &&
+          d.projectId === activeProjectId
+      ),
+    [decisions, activeProjectId]
+  );
+
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
   );
 
   const pendingActions = useMemo(() => {
     const actions: Array<{ messageId: string; card: { id: string; title: string; description: string; cost?: number; status: string } }> = [];
-    for (const p of projects) {
-      for (const msg of p.messages) {
-        if (msg.cards) {
-          for (const c of msg.cards) {
-            if (c.status === "pending") {
-              actions.push({ messageId: msg.id, card: c });
-            }
-          }
+    if (!activeProject) return actions;
+    for (const msg of activeProject.messages) {
+      if (!msg.cards) continue;
+      for (const c of msg.cards) {
+        if (c.status === "pending") {
+          actions.push({ messageId: msg.id, card: c });
         }
       }
     }
     return actions;
-  }, [projects]);
+  }, [activeProject]);
 
   const pendingBalance = getPendingBalance();
   const totalPending = pendingActions.length + undecided.length + (pendingBalance > 0.01 ? 1 : 0);

@@ -11,11 +11,13 @@ export function Inspector() {
     inspectorTab,
     setInspectorTab,
     projects,
-    email,
+    activeProjectId,
     logout,
   } = useMeterStore();
 
   if (!inspectorOpen) return null;
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   const tabs = ["usage", "purchases", "decisions", "controls"] as const;
 
@@ -55,10 +57,10 @@ export function Inspector() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {inspectorTab === "usage" && <UsageTab allProjects={projects} />}
-          {inspectorTab === "purchases" && <PurchasesTab />}
-          {inspectorTab === "decisions" && <DecisionsTab />}
-          {inspectorTab === "controls" && <SettingsTab email={email} />}
+          {inspectorTab === "usage" && <UsageTab project={activeProject} />}
+          {inspectorTab === "purchases" && <PurchasesTab activeProject={activeProject} />}
+          {inspectorTab === "decisions" && <DecisionsTab activeProjectId={activeProject?.id ?? null} />}
+          {inspectorTab === "controls" && <SettingsTab activeProjectId={activeProject?.id ?? null} />}
         </div>
 
         <div className="border-t border-border p-4">
@@ -92,12 +94,13 @@ interface ProjectLike {
   todayMessageCount: number;
   todayByModel: Record<string, { cost: number; count: number }>;
   totalCost: number;
+  settlementError?: string | null;
+  chatBlocked?: boolean;
 }
 
-function UsageTab({ allProjects }: { allProjects: ProjectLike[] }) {
-  const allMessages = allProjects.flatMap((p) => p.messages);
-  const assistantMsgs = allMessages.filter((m) => m.role === "assistant" && m.cost !== undefined);
-  const totalCost = allProjects.reduce((sum, p) => sum + p.totalCost, 0);
+function UsageTab({ project }: { project: ProjectLike | null }) {
+  const assistantMsgs = (project?.messages ?? []).filter((m) => m.role === "assistant" && m.cost !== undefined);
+  const totalCost = project?.totalCost ?? 0;
 
   const stats = useMemo(() => {
     const now = Date.now();
@@ -192,145 +195,71 @@ function UsageTab({ allProjects }: { allProjects: ProjectLike[] }) {
 }
 
 /* ─── SETTINGS TAB ─── */
-function SettingsTab({ email }: { email: string | null }) {
-  const userId = useMeterStore((s) => s.userId);
-  const logout = useMeterStore((s) => s.logout);
-  const [passkeys, setPasskeys] = useState<Array<{ credentialId: string; deviceType: string | null; backedUp: boolean; createdAt: string }>>([]);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+function SettingsTab({ activeProjectId }: { activeProjectId: string | null }) {
+  const spendLimits = useMeterStore((s) => s.spendLimits);
+  const fetchSpendLimits = useMeterStore((s) => s.fetchSpendLimits);
+  const updateSpendLimits = useMeterStore((s) => s.updateSpendLimits);
+
+  const [dailyInput, setDailyInput] = useState("");
+  const [monthlyInput, setMonthlyInput] = useState("");
+  const [perTxnInput, setPerTxnInput] = useState("");
 
   useEffect(() => {
-    if (!userId) return;
-    fetch(`/api/auth/passkeys?userId=${encodeURIComponent(userId)}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.passkeys) setPasskeys(data.passkeys); })
-      .catch(() => {});
-  }, [userId]);
+    if (!activeProjectId) return;
+    fetchSpendLimits(activeProjectId);
+  }, [activeProjectId, fetchSpendLimits]);
 
-  const handleDeleteAccount = async () => {
-    if (!userId || deleteConfirm !== "delete my account") return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const res = await fetch("/api/account/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: "Deletion failed" }));
-        setDeleteError(body.error ?? "Deletion failed");
-        setDeleting(false);
-        return;
-      }
-      logout();
-    } catch {
-      setDeleteError("Deletion failed");
-      setDeleting(false);
-    }
+  useEffect(() => {
+    setDailyInput(spendLimits.dailyLimit != null ? String(spendLimits.dailyLimit) : "");
+    setMonthlyInput(spendLimits.monthlyLimit != null ? String(spendLimits.monthlyLimit) : "");
+    setPerTxnInput(spendLimits.perTxnLimit != null ? String(spendLimits.perTxnLimit) : "");
+  }, [spendLimits]);
+
+  const saveLimitOnBlur = (field: keyof typeof spendLimits, raw: string) => {
+    const val = raw.trim() === "" ? null : Number(raw);
+    if (val !== null && isNaN(val)) return;
+    updateSpendLimits({ [field]: val }, activeProjectId ?? undefined);
   };
+
+  if (!activeProjectId) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10">
+        <span className="font-mono text-xs text-muted-foreground/50">
+          Select a workspace to edit controls
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Account
+          Spend Controls
         </div>
-        <StatRow label="Email" value={email ?? "—"} />
-        {passkeys.length > 0 && (
-          <div className="mt-2">
-            {passkeys.map((pk) => (
-              <div key={pk.credentialId} className="flex items-center gap-2 py-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/60">
-                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-                </svg>
-                <span className="text-xs text-muted-foreground">
-                  Passkey{pk.deviceType ? ` (${pk.deviceType})` : ""}
-                </span>
-                <span className="ml-auto text-[10px] text-muted-foreground/40">
-                  {pk.backedUp ? "Synced" : "Local"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="h-px bg-border" />
-
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Model Preferences
+        <div className="space-y-2">
+          <LimitRow
+            label="Daily Limit"
+            value={dailyInput}
+            onChange={setDailyInput}
+            onBlur={() => saveLimitOnBlur("dailyLimit", dailyInput)}
+          />
+          <LimitRow
+            label="Monthly Limit"
+            value={monthlyInput}
+            onChange={setMonthlyInput}
+            onBlur={() => saveLimitOnBlur("monthlyLimit", monthlyInput)}
+          />
+          <LimitRow
+            label="Per-Txn Max"
+            value={perTxnInput}
+            onChange={setPerTxnInput}
+            onBlur={() => saveLimitOnBlur("perTxnLimit", perTxnInput)}
+          />
         </div>
-        <p className="font-mono text-[10px] text-muted-foreground/40">
-          Auto-routing picks the best model per message. You can override per-message in the composer.
+        <p className="mt-2 font-mono text-[9px] text-muted-foreground/30">
+          Leave blank for no limit. Limits are enforced server-side.
         </p>
-      </div>
-
-      <div className="h-px bg-border" />
-
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Data
-        </div>
-        <p className="font-mono text-[10px] text-muted-foreground/40 mb-2">
-          Your conversation persists as one eternal session.
-        </p>
-      </div>
-
-      <div className="h-px bg-border" />
-
-      {/* Danger Zone */}
-      <div>
-        <div className="font-mono text-[10px] text-red-400/60 uppercase tracking-wider mb-2">
-          Danger Zone
-        </div>
-        <div className="rounded-lg border border-red-500/20 p-3">
-          <p className="font-mono text-[10px] text-muted-foreground/60 mb-3">
-            Permanently delete your account and all associated data. This cannot be undone.
-          </p>
-          {!deleteOpen ? (
-            <button
-              onClick={() => setDeleteOpen(true)}
-              className="rounded-lg border border-red-500/30 px-3 py-1.5 font-mono text-[10px] text-red-400 transition-colors hover:bg-red-500/10"
-            >
-              Delete Account
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <p className="font-mono text-[10px] text-muted-foreground/60">
-                Type <span className="text-foreground">delete my account</span> to confirm:
-              </p>
-              <input
-                autoFocus
-                value={deleteConfirm}
-                onChange={(e) => setDeleteConfirm(e.target.value)}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-red-500/50"
-                placeholder="delete my account"
-              />
-              {deleteError && (
-                <p className="font-mono text-[10px] text-red-400">{deleteError}</p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setDeleteOpen(false); setDeleteConfirm(""); setDeleteError(null); }}
-                  className="flex-1 rounded-lg border border-border py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteAccount}
-                  disabled={deleteConfirm !== "delete my account" || deleting}
-                  className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 py-1.5 font-mono text-[10px] text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
-                >
-                  {deleting ? "Deleting..." : "Confirm Delete"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -439,14 +368,17 @@ function DecisionRow({ decision }: { decision: Decision }) {
   );
 }
 
-function DecisionsTab() {
+function DecisionsTab({ activeProjectId }: { activeProjectId: string | null }) {
   const { decisions } = useDecisionsStore();
-  const visible = decisions
-    .filter((d) => !d.archived)
+  const scoped = decisions
+    .filter((d) => !d.archived && d.projectId && d.projectId === activeProjectId)
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === "undecided" ? -1 : 1;
       return b.updatedAt - a.updatedAt;
     });
+  const legacy = decisions
+    .filter((d) => !d.archived && !d.projectId)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
     <div className="flex flex-col gap-4">
@@ -454,7 +386,7 @@ function DecisionsTab() {
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Decisions
         </div>
-        {visible.length === 0 ? (
+        {scoped.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <span className="font-mono text-xs text-muted-foreground/40">
               No decisions yet
@@ -465,12 +397,27 @@ function DecisionsTab() {
           </div>
         ) : (
           <div className="flex flex-col gap-0.5">
-            {visible.map((d) => (
+            {scoped.map((d) => (
               <DecisionRow key={d.id} decision={d} />
             ))}
           </div>
         )}
       </div>
+      {legacy.length > 0 && (
+        <>
+          <div className="h-px bg-border" />
+          <div>
+            <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
+              Unassigned
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {legacy.map((d) => (
+                <DecisionRow key={d.id} decision={d} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -534,7 +481,7 @@ function CardVisual({ card, index, isTop, onClick, onRemove, canRemove }: {
 }
 
 /* ─── PURCHASES TAB ─── */
-function PurchasesTab() {
+function PurchasesTab({ activeProject }: { activeProject: ProjectLike | null }) {
   const cards = useMeterStore((s) => s.cards);
   const cardsLoading = useMeterStore((s) => s.cardsLoading);
   const fetchCards = useMeterStore((s) => s.fetchCards);
@@ -543,37 +490,27 @@ function PurchasesTab() {
   const settlementHistory = useMeterStore((s) => s.settlementHistory);
   const settlementHistoryLoading = useMeterStore((s) => s.settlementHistoryLoading);
   const fetchSettlementHistory = useMeterStore((s) => s.fetchSettlementHistory);
-  const spendLimits = useMeterStore((s) => s.spendLimits);
-  const fetchSpendLimits = useMeterStore((s) => s.fetchSpendLimits);
-  const updateSpendLimits = useMeterStore((s) => s.updateSpendLimits);
   const userId = useMeterStore((s) => s.userId);
   const getPendingBalance = useMeterStore((s) => s.getPendingBalance);
   const settleAll = useMeterStore((s) => s.settleAll);
   const isSettling = useMeterStore((s) => s.isSettling);
-  const settlementError = useMeterStore((s) => s.settlementError);
   const clearSettlementError = useMeterStore((s) => s.clearSettlementError);
   const cardLast4 = useMeterStore((s) => s.cardLast4);
   const cardBrand = useMeterStore((s) => s.cardBrand);
 
+  const settlementError = activeProject?.settlementError ?? null;
+
   const [addingCard, setAddingCard] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [settleSuccess, setSettleSuccess] = useState(false);
-
-  const [dailyInput, setDailyInput] = useState("");
-  const [monthlyInput, setMonthlyInput] = useState("");
-  const [perTxnInput, setPerTxnInput] = useState("");
+  const workspaceId = activeProject?.id ?? null;
 
   useEffect(() => {
     fetchCards();
-    fetchSettlementHistory();
-    fetchSpendLimits();
-  }, [fetchCards, fetchSettlementHistory, fetchSpendLimits]);
-
-  useEffect(() => {
-    setDailyInput(spendLimits.dailyLimit != null ? String(spendLimits.dailyLimit) : "");
-    setMonthlyInput(spendLimits.monthlyLimit != null ? String(spendLimits.monthlyLimit) : "");
-    setPerTxnInput(spendLimits.perTxnLimit != null ? String(spendLimits.perTxnLimit) : "");
-  }, [spendLimits]);
+    if (workspaceId) {
+      fetchSettlementHistory(workspaceId);
+    }
+  }, [fetchCards, fetchSettlementHistory, workspaceId]);
 
   const sorted = useMemo(() => {
     return [...cards].sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
@@ -628,12 +565,6 @@ function PurchasesTab() {
       setSettleSuccess(true);
       setTimeout(() => setSettleSuccess(false), 2000);
     }
-  };
-
-  const saveLimitOnBlur = (field: keyof typeof spendLimits, raw: string) => {
-    const val = raw.trim() === "" ? null : Number(raw);
-    if (val !== null && isNaN(val)) return;
-    updateSpendLimits({ [field]: val });
   };
 
   return (
@@ -762,37 +693,6 @@ function PurchasesTab() {
         )}
       </div>
 
-      <div className="h-px bg-border" />
-
-      {/* Spend Controls */}
-      <div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Spend Controls
-        </div>
-        <div className="space-y-2">
-          <LimitRow
-            label="Daily Limit"
-            value={dailyInput}
-            onChange={setDailyInput}
-            onBlur={() => saveLimitOnBlur("dailyLimit", dailyInput)}
-          />
-          <LimitRow
-            label="Monthly Limit"
-            value={monthlyInput}
-            onChange={setMonthlyInput}
-            onBlur={() => saveLimitOnBlur("monthlyLimit", monthlyInput)}
-          />
-          <LimitRow
-            label="Per-Txn Max"
-            value={perTxnInput}
-            onChange={setPerTxnInput}
-            onBlur={() => saveLimitOnBlur("perTxnLimit", perTxnInput)}
-          />
-        </div>
-        <p className="mt-2 font-mono text-[9px] text-muted-foreground/30">
-          Leave blank for no limit. Limits are enforced server-side.
-        </p>
-      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useMeterStore } from "@/lib/store";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 
 const SYNC_INTERVAL = 10_000; // sync every 10 seconds
 const SYNC_DEBOUNCE = 2_000; // debounce after message
@@ -41,6 +42,8 @@ export function useSessionSync() {
       name: (session.project_name as string) ?? (session.name as string) ?? (session.id as string),
       messages,
       isStreaming: false,
+      settlementError: null,
+      chatBlocked: false,
       todayCost: Number(session.today_cost ?? 0),
       todayTokensIn: Number(session.today_tokens_in ?? 0),
       todayTokensOut: Number(session.today_tokens_out ?? 0),
@@ -69,7 +72,6 @@ export function useSessionSync() {
 
     // Sync each project as a session
     for (const project of projects) {
-      if (project.messages.length === 0) continue;
 
       try {
         const res = await fetch("/api/sessions", {
@@ -87,7 +89,7 @@ export function useSessionSync() {
               todayMessageCount: project.todayMessageCount,
               todayDate: project.todayDate,
             },
-            messages: project.messages,
+            messages: project.messages ?? [],
           }),
         });
         if (!res.ok) {
@@ -132,7 +134,6 @@ export function useSessionSync() {
       if (!userId) return;
       // Use sendBeacon for reliable unload sync
       for (const project of projects) {
-        if (project.messages.length === 0) continue;
         const body = JSON.stringify({
           userId,
           session: {
@@ -182,6 +183,14 @@ export function useSessionSync() {
                 ? s.activeProjectId
                 : serverProjects[0].id,
             }));
+            const activeSessionId = serverProjects.some((p) => p.id === store.activeProjectId)
+              ? store.activeProjectId
+              : serverProjects[0].id;
+            useWorkspaceStore
+              .getState()
+              .upsertCompaniesFromSessions(serverSessions, activeSessionId);
+          } else {
+            useWorkspaceStore.getState().upsertCompaniesFromSessions(serverSessions, store.activeProjectId);
           }
           return;
         }
@@ -208,14 +217,18 @@ export function useSessionSync() {
           }
         }
 
+        let nextActiveProjectId = store.activeProjectId;
         if (changed) {
+          nextActiveProjectId = merged.some((p) => p.id === store.activeProjectId)
+            ? store.activeProjectId
+            : merged[0]?.id ?? store.activeProjectId;
           useMeterStore.setState((s) => ({
             projects: merged,
-            activeProjectId: merged.some((p) => p.id === s.activeProjectId)
-              ? s.activeProjectId
-              : merged[0]?.id ?? s.activeProjectId,
+            activeProjectId: nextActiveProjectId,
           }));
         }
+
+        useWorkspaceStore.getState().upsertCompaniesFromSessions(serverSessions, nextActiveProjectId);
       } catch {
         // Silent fail — localStorage still works as fallback
       }
