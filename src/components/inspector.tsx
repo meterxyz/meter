@@ -127,8 +127,7 @@ function SettingsTab({ activeProjectId }: { activeProjectId: string | null }) {
   }
 
   return (
-    <>
-      <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div>
         <div className="font-mono text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">
           Spend Controls
