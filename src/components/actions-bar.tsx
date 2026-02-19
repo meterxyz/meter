@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useMeterStore } from "@/lib/store";
 import { useDecisionsStore } from "@/lib/decisions-store";
 
-export function ApproveButton() {
+export function ActionsBar() {
   const [open, setOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const projects = useMeterStore((s) => s.projects);
   const activeProjectId = useMeterStore((s) => s.activeProjectId);
@@ -56,7 +56,7 @@ export function ApproveButton() {
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
@@ -80,40 +80,40 @@ export function ApproveButton() {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div ref={containerRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-2 rounded-lg border border-border px-2.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
+        className="flex w-full items-center gap-2 bg-foreground/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-muted-foreground/80"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="9 11 12 14 22 4" />
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
-        <span>Approve</span>
+        Actions
         {totalPending > 0 && (
-          <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500/20 px-1 font-mono text-[9px] text-amber-400">
+          <span className="ml-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500/20 px-1 font-mono text-[9px] text-amber-400">
             {totalPending}
           </span>
         )}
         <svg
-          width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform ${open ? "rotate-180" : ""}`}
+          className={`ml-auto transition-transform ${open ? "rotate-90" : ""}`}
         >
-          <polyline points="6 9 12 15 18 9" />
+          <polyline points="9 18 15 12 9 6" />
         </svg>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[320px] rounded-xl border border-border bg-card shadow-xl">
+        <div className="border-t border-border/50 bg-foreground/[0.03] py-1">
           {pendingActions.length > 0 && (
-            <div className="border-b border-border/50 px-4 py-3">
+            <div className="border-b border-border/30 px-3 py-2">
               <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
                 Pending Actions
               </div>
               <div className="space-y-2">
                 {pendingActions.map(({ messageId, card }) => (
-                  <div key={card.id} className="rounded-lg border border-border/50 p-2.5">
+                  <div key={card.id} className="rounded-lg border border-border/50 p-2.5 bg-background/40">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-mono text-[11px] text-foreground truncate">{card.title}</p>
@@ -144,7 +144,7 @@ export function ApproveButton() {
           )}
 
           {undecided.length > 0 && (
-            <div className="border-b border-border/50 px-4 py-3">
+            <div className="border-b border-border/30 px-3 py-2">
               <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
                 Open Decisions
               </div>
@@ -172,7 +172,7 @@ export function ApproveButton() {
           )}
 
           {pendingBalance > 0.01 && (
-            <div className="border-b border-border/50 px-4 py-3">
+            <div className="border-b border-border/30 px-3 py-2">
               <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
                 Outstanding Balance
               </div>
@@ -194,7 +194,7 @@ export function ApproveButton() {
           )}
 
           {totalPending === 0 && (
-            <div className="px-4 py-6 text-center">
+            <div className="px-3 py-4 text-center">
               <p className="font-mono text-[11px] text-muted-foreground/40">Nothing to approve</p>
               <p className="mt-1 font-mono text-[10px] text-muted-foreground/30">
                 Actions, decisions, and settlements appear here

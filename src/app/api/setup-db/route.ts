@@ -128,6 +128,7 @@ create table if not exists oauth_tokens (
   refresh_token text,
   expires_at timestamptz,
   scopes text,
+  metadata jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique(user_id, provider)
@@ -161,6 +162,7 @@ alter table chat_sessions add column if not exists daily_limit numeric;
 alter table chat_sessions add column if not exists monthly_limit numeric;
 alter table chat_sessions add column if not exists per_txn_limit numeric;
 alter table settlement_history add column if not exists workspace_id text;
+alter table oauth_tokens add column if not exists metadata jsonb;
 `;
 
 // Extract project ref from Supabase URL (e.g. "yzjevhsacvqbcygbmewk" from "https://yzjevhsacvqbcygbmewk.supabase.co")

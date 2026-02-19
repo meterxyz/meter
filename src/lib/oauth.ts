@@ -195,7 +195,8 @@ export async function exchangeCodeForToken(
 export async function storeToken(
   userId: string,
   provider: string,
-  tokenData: TokenResponse
+  tokenData: TokenResponse,
+  metadata?: Record<string, unknown> | null
 ): Promise<void> {
   const supabase = getSupabaseServer();
   const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
@@ -212,6 +213,7 @@ export async function storeToken(
       refresh_token: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : null,
       expires_at: expiresAt,
       scopes: tokenData.scope ?? null,
+      metadata: metadata ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,provider" }
@@ -221,7 +223,8 @@ export async function storeToken(
 export async function storeApiKey(
   userId: string,
   provider: string,
-  apiKey: string
+  apiKey: string,
+  metadata?: Record<string, unknown> | null
 ): Promise<void> {
   const supabase = getSupabaseServer();
   const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
@@ -235,20 +238,21 @@ export async function storeApiKey(
       refresh_token: null,
       expires_at: null,
       scopes: null,
+      metadata: metadata ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,provider" }
   );
 }
 
-export async function getToken(
+export async function getTokenRecord(
   userId: string,
   provider: string
-): Promise<{ accessToken: string; refreshToken?: string } | null> {
+): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: string | null; metadata?: Record<string, unknown> | null } | null> {
   const supabase = getSupabaseServer();
   const { data } = await supabase
     .from("oauth_tokens")
-    .select("access_token, refresh_token")
+    .select("access_token, refresh_token, expires_at, metadata")
     .eq("user_id", userId)
     .eq("provider", provider)
     .single();
@@ -258,7 +262,98 @@ export async function getToken(
   return {
     accessToken: decryptToken(data.access_token),
     refreshToken: data.refresh_token ? decryptToken(data.refresh_token) : undefined,
+    expiresAt: data.expires_at ?? null,
+    metadata: (data.metadata as Record<string, unknown> | null) ?? null,
   };
+}
+
+export async function getToken(
+  userId: string,
+  provider: string
+): Promise<{ accessToken: string; refreshToken?: string } | null> {
+  const record = await getTokenRecord(userId, provider);
+  if (!record) return null;
+  return {
+    accessToken: record.accessToken,
+    refreshToken: record.refreshToken,
+  };
+}
+
+async function refreshAccessToken(
+  provider: OAuthProviderConfig,
+  refreshToken: string
+): Promise<TokenResponse> {
+  const clientId = process.env[provider.clientIdEnv];
+  const clientSecret = process.env[provider.clientSecretEnv];
+  if (!clientId || !clientSecret) {
+    throw new Error(`Missing OAuth credentials for ${provider.name}`);
+  }
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+
+  if (provider.id === "github") {
+    headers.Accept = "application/json";
+  }
+
+  const res = await fetch(provider.tokenUrl!, {
+    method: "POST",
+    headers,
+    body: body.toString(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "unknown error");
+    throw new Error(`Refresh failed for ${provider.name}: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
+export async function getValidAccessToken(
+  userId: string,
+  providerId: string
+): Promise<{ accessToken: string; metadata?: Record<string, unknown> | null } | null> {
+  const provider = OAUTH_PROVIDERS[providerId];
+  if (!provider) return null;
+
+  const record = await getTokenRecord(userId, providerId);
+  if (!record) return null;
+
+  if (!record.expiresAt) {
+    return { accessToken: record.accessToken, metadata: record.metadata ?? null };
+  }
+
+  const expiresAtMs = new Date(record.expiresAt).getTime();
+  if (Number.isNaN(expiresAtMs)) {
+    return { accessToken: record.accessToken, metadata: record.metadata ?? null };
+  }
+
+  const needsRefresh = expiresAtMs - Date.now() < 60_000;
+  if (!needsRefresh) {
+    return { accessToken: record.accessToken, metadata: record.metadata ?? null };
+  }
+
+  if (!record.refreshToken) {
+    throw new Error(`Token expired for ${provider.name}. Please reconnect.`);
+  }
+
+  const refreshed = await refreshAccessToken(provider, record.refreshToken);
+  const tokenData: TokenResponse = {
+    ...refreshed,
+    refresh_token: refreshed.refresh_token ?? record.refreshToken,
+  };
+  await storeToken(userId, providerId, tokenData, record.metadata ?? null);
+
+  return { accessToken: tokenData.access_token, metadata: record.metadata ?? null };
 }
 
 export async function deleteToken(userId: string, provider: string): Promise<void> {

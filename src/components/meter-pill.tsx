@@ -101,8 +101,8 @@ export function MeterPill({ value }: MeterPillProps) {
           <span className="text-[12px] text-foreground tabular-nums">
             {costStr}
           </span>
-          <span className="text-[10px] text-muted-foreground/50">
-            today
+          <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+            TODAY
           </span>
         </button>
       </PopoverTrigger>
