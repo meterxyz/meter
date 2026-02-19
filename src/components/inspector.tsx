@@ -20,8 +20,6 @@ export function Inspector() {
     activeProjectId,
   } = useMeterStore();
 
-  if (!inspectorOpen) return null;
-
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   useEffect(() => {
@@ -29,6 +27,8 @@ export function Inspector() {
       setInspectorTab("decisions");
     }
   }, [inspectorTab, setInspectorTab]);
+
+  if (!inspectorOpen) return null;
 
   return (
     <>
