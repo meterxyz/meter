@@ -23,6 +23,7 @@ interface WorkspaceState {
 
   // Combined create+activate actions (single set call, no cascading renders)
   createCompany: (name: string, sessionId?: string) => string;
+  deleteCompany: (id: string) => void;
   createProject: (companyId: string, name: string) => string;
   setActiveCompany: (id: string) => void;
   setActiveProject: (id: string | null) => void;
@@ -54,6 +55,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           activeProjectId: null,
         }));
         return id;
+      },
+
+      deleteCompany: (id: string) => {
+        set((s) => {
+          const companies = s.companies.filter((c) => c.id !== id);
+          const projects = s.projects.filter((p) => p.companyId !== id);
+          const activeCompanyId = s.activeCompanyId === id
+            ? companies[0]?.id ?? null
+            : s.activeCompanyId;
+          const activeProjectId = s.activeCompanyId === id ? null : s.activeProjectId;
+          return { companies, projects, activeCompanyId, activeProjectId };
+        });
       },
 
       // Add project AND activate it in a single set()

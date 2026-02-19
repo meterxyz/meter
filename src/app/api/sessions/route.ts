@@ -52,6 +52,49 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// DELETE /api/sessions?sessionId=xxx&userId=xxx — delete a session and its messages
+export async function DELETE(req: NextRequest) {
+  const sessionId = req.nextUrl.searchParams.get("sessionId");
+  const userId = req.nextUrl.searchParams.get("userId");
+
+  if (!sessionId || !userId) {
+    return NextResponse.json({ error: "Missing sessionId or userId" }, { status: 400 });
+  }
+
+  try {
+    const supabase = getSupabaseServer();
+
+    // Verify the session belongs to this user
+    const { data: session, error: fetchErr } = await supabase
+      .from("chat_sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .eq("user_id", userId)
+      .single();
+
+    if (fetchErr || !session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    // Delete messages first (cascade should handle this, but be explicit)
+    await supabase.from("chat_messages").delete().eq("session_id", sessionId);
+
+    // Delete the session
+    const { error: delErr } = await supabase
+      .from("chat_sessions")
+      .delete()
+      .eq("id", sessionId)
+      .eq("user_id", userId);
+
+    if (delErr) throw delErr;
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Failed to delete session:", err);
+    return NextResponse.json({ error: "Failed to delete session" }, { status: 500 });
+  }
+}
+
 // POST /api/sessions — save/sync a session with its messages
 export async function POST(req: NextRequest) {
   try {
