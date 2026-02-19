@@ -2,11 +2,11 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useMeterStore, ChatMessage } from "@/lib/store";
-import { DecideButton } from "@/components/decide-button";
+import { MeterPill } from "@/components/meter-pill";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
 import { Inspector } from "@/components/inspector";
 import { ActionCard } from "@/components/action-card";
-import { HeaderMeter } from "@/components/header-meter";
+import { ApproveButton } from "@/components/approve-button";
 import { ConnectorsBar } from "@/components/connectors-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { getModel, shortModelName } from "@/lib/models";
@@ -40,6 +40,47 @@ function ErrorCard({ payload }: { payload: string }) {
     </div>
   );
 }
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground/0 transition-all group-hover/msg:text-muted-foreground/40 hover:!text-muted-foreground hover:bg-foreground/5"
+      title={copied ? "Copied!" : "Copy message"}
+    >
+      {copied ? (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+      )}
+    </button>
+  );
+}
+
+function DecisionPill({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 font-mono text-[10px] text-emerald-400 transition-colors hover:bg-emerald-500/10"
+    >
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      Decision logged
+    </button>
+  );
+}
+
+const mdComponents = {
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+  ),
+};
 
 function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string }) {
   const hasCost = msg.cost !== undefined;
@@ -158,8 +199,6 @@ export function ChatView() {
 
   const userId = useMeterStore((s) => s.userId);
   const chatBlocked = useMeterStore((s) => s.chatBlocked);
-  const decisionMode = useMeterStore((s) => s.decisionMode);
-  const setDecisionMode = useMeterStore((s) => s.setDecisionMode);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -170,6 +209,9 @@ export function ChatView() {
   const [switchingProjectName, setSwitchingProjectName] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [rerouting, setRerouting] = useState<{ provider: string; toModel: string } | null>(null);
+  const [logoMenuOpen, setLogoMenuOpen] = useState(false);
+  const logoMenuRef = useRef<HTMLDivElement>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const isNearBottomRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
   const scrollAwayAtRef = useRef(0);
@@ -195,6 +237,17 @@ export function ChatView() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [modelPickerOpen]);
+
+  useEffect(() => {
+    if (!logoMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (logoMenuRef.current && !logoMenuRef.current.contains(e.target as Node)) {
+        setLogoMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [logoMenuOpen]);
 
   const openedRef = useRef(false);
   useEffect(() => {
@@ -253,9 +306,7 @@ export function ChatView() {
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     isNearBottomRef.current = nearBottom;
-    // Only re-enable auto-scroll if user has returned to the bottom AND
-    // enough time has passed since they scrolled away (prevents the first
-    // tiny wheel-up tick from being immediately cleared).
+    setShowScrollBtn(!nearBottom);
     if (nearBottom && Date.now() - scrollAwayAtRef.current > 500) {
       userScrolledAwayRef.current = false;
     }
@@ -348,7 +399,6 @@ export function ChatView() {
           model: selectedModelId,
           userId: userId || undefined,
           projectId: activeProjectId,
-          decisionMode,
           connectedServices: Object.keys(connectedServices).filter(
             (k) => connectedServices[k]
           ),
@@ -395,13 +445,14 @@ export function ChatView() {
             } else if (data.type === "tool_result") {
               if (data.name === "save_decision" && data.decision) {
                 const d = data.decision as { title: string; status: string; choice: string; alternatives?: string[]; reasoning?: string };
-                useDecisionsStore.getState().addDecision({
+                const decId = useDecisionsStore.getState().addDecision({
                   title: d.title,
                   status: d.status === "decided" ? "decided" : "undecided",
                   choice: d.choice,
                   alternatives: d.alternatives,
                   reasoning: d.reasoning ?? undefined,
                 });
+                useMeterStore.getState().setMessageDecisionId(decId);
               }
             } else if (data.type === "rerouting") {
               // Show rerouting status line — the fallback system is switching models
@@ -430,7 +481,6 @@ export function ChatView() {
 
       if (finalUsage) {
         finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence, actualModelUsed ?? undefined);
-        if (decisionMode) setDecisionMode(false);
       }
     } catch {
       // keep silent for now
@@ -458,6 +508,18 @@ export function ChatView() {
   }, [pendingInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const connectedServices = useMeterStore((s) => s.connectedServices);
+  const logout = useMeterStore((s) => s.logout);
+
+  const scrollToBottom = useCallback(() => {
+    userScrolledAwayRef.current = false;
+    setShowScrollBtn(false);
+    const el = scrollRef.current;
+    if (el) {
+      isProgrammaticScrollRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => { isProgrammaticScrollRef.current = false; });
+    }
+  }, []);
 
   const lastMsg = messages[messages.length - 1];
   const showThinking = isStreaming && (rerouting || activeTool || (lastMsg?.role === "assistant" && lastMsg.content === ""));
@@ -473,13 +535,48 @@ export function ChatView() {
         </div>
       )}
 
-      <div className={`flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
+      <div className={`relative flex flex-1 flex-col transition-all duration-300 ${inspectorOpen ? "mr-[380px]" : ""}`}>
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
-          <div className="flex items-center gap-2">
-            <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
+          <div className="relative flex items-center gap-2" ref={logoMenuRef}>
+            <button
+              onClick={() => setLogoMenuOpen((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:bg-foreground/5"
+            >
+              <img src="/logo-dark-copy.webp" alt="Meter" width={72} height={20} />
+              <svg
+                width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                className={`text-muted-foreground/40 transition-transform ${logoMenuOpen ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {logoMenuOpen && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xl border border-border bg-card shadow-xl py-1">
+                <button
+                  onClick={() => { setLogoMenuOpen(false); setInspectorOpen(true); setInspectorTab("controls"); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                  Controls
+                </button>
+                <div className="mx-2 my-1 h-px bg-border" />
+                <button
+                  onClick={() => { setLogoMenuOpen(false); logout(); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
           <div className="relative flex items-center gap-2">
-            <HeaderMeter />
+            <ApproveButton />
             <button
               onClick={toggleInspector}
               className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 transition-colors hover:bg-foreground/5"
@@ -504,20 +601,22 @@ export function ChatView() {
             )}
 
             {messages.map((msg) => (
-              <div key={msg.id} className="mb-4">
+              <div key={msg.id} className="group/msg relative mb-4">
                 <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
+                  <div className={`relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
+                    {msg.role === "assistant" && msg.content && !msg.content.startsWith("__error__") && (
+                      <CopyButton text={msg.content} />
+                    )}
                     {msg.role === "assistant" && msg.content.startsWith("__error__") ? (
                       <ErrorCard payload={msg.content.slice("__error__".length)} />
                     ) : msg.role === "assistant" ? (
                       <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-a:text-blue-400">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown components={mdComponents}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     )}
 
-                    {/* Inline action cards */}
                     {msg.cards && msg.cards.length > 0 && (
                       <div className="mt-2">
                         {msg.cards.map((card) => (
@@ -531,19 +630,35 @@ export function ChatView() {
                       </div>
                     )}
 
+                    {msg.role === "assistant" && msg.decisionId && (
+                      <DecisionPill onOpen={() => { setInspectorOpen(true); setInspectorTab("decisions"); }} />
+                    )}
                     {msg.role === "assistant" && <MessageFooter msg={msg} projectId={activeProjectId} />}
                   </div>
                 </div>
               </div>
             ))}
 
-            {/* Thinking / tool indicator — shows when waiting or using tools */}
             {showThinking && <ThinkingIndicator toolName={activeTool} rerouting={rerouting} />}
 
-            {/* Scroll anchor */}
             <div ref={bottomRef} data-scroll-anchor />
           </div>
         </div>
+
+        {showScrollBtn && (
+          <div className="pointer-events-none absolute bottom-24 left-0 right-0 flex justify-center" style={{ zIndex: 20 }}>
+            <button
+              onClick={scrollToBottom}
+              className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card shadow-lg transition-colors hover:bg-foreground/5"
+              title="Scroll to bottom"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <polyline points="19 12 12 19 5 12" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Composer area */}
         <div className="p-4">
@@ -568,6 +683,7 @@ export function ChatView() {
                   <ModelPickerTrigger
                     open={modelPickerOpen}
                     onToggle={() => setModelPickerOpen(!modelPickerOpen)}
+                    overrideModelId={rerouting?.toModel ?? null}
                   />
                 <textarea
                   ref={inputRef}
@@ -582,7 +698,7 @@ export function ChatView() {
                     t.style.height = Math.min(t.scrollHeight, 120) + "px";
                   }}
                 />
-                <DecideButton />
+                <MeterPill />
                 <button
                   onClick={handleSend}
                   disabled={isStreaming}

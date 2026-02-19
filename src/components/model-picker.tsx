@@ -56,16 +56,19 @@ function ModelLogo({ model, size = 14 }: { model: ModelConfig; size?: number }) 
 export function ModelPickerTrigger({
   open,
   onToggle,
+  overrideModelId,
 }: {
   open: boolean;
   onToggle: () => void;
+  overrideModelId?: string | null;
 }) {
   const selectedModelId = useMeterStore((s) => s.selectedModelId);
   const isStreaming = useMeterStore((s) => {
     const project = s.projects.find((p) => p.id === s.activeProjectId) ?? s.projects[0];
     return project?.isStreaming ?? false;
   });
-  const model = getModel(selectedModelId);
+  const displayId = overrideModelId ?? selectedModelId;
+  const model = getModel(displayId);
 
   return (
     <button

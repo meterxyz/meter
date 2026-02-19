@@ -3,9 +3,12 @@ export interface ModelConfig {
   name: string;
   provider: string;
   color: string;
-  inputPrice: number;  // per token
-  outputPrice: number; // per token
+  inputPrice: number;  // per token (user-facing, includes markup)
+  outputPrice: number; // per token (user-facing, includes markup)
 }
+
+/** Multiplier applied on top of provider costs. 3 = users pay 3x provider rate. */
+export const MARKUP_MULTIPLIER = 3;
 
 export const MODELS: ModelConfig[] = [
   {
@@ -13,48 +16,48 @@ export const MODELS: ModelConfig[] = [
     name: "Auto",
     provider: "Meter",
     color: "#A1A1AA",
-    inputPrice: 3.0 / 1_000_000,
-    outputPrice: 15.0 / 1_000_000,
+    inputPrice: (3.0 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (15.0 / 1_000_000) * MARKUP_MULTIPLIER,
   },
   {
     id: "anthropic/claude-sonnet-4.6",
     name: "Sonnet 4.6",
     provider: "Anthropic",
     color: "#D97757",
-    inputPrice: 3.0 / 1_000_000,
-    outputPrice: 15.0 / 1_000_000,
+    inputPrice: (3.0 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (15.0 / 1_000_000) * MARKUP_MULTIPLIER,
   },
   {
     id: "anthropic/claude-opus-4.6",
     name: "Opus 4.6",
     provider: "Anthropic",
     color: "#D97757",
-    inputPrice: 5.0 / 1_000_000,
-    outputPrice: 25.0 / 1_000_000,
+    inputPrice: (5.0 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (25.0 / 1_000_000) * MARKUP_MULTIPLIER,
   },
   {
     id: "openai/gpt-5.2",
     name: "GPT-5.2",
     provider: "OpenAI",
     color: "#10A37F",
-    inputPrice: 1.75 / 1_000_000,
-    outputPrice: 14.0 / 1_000_000,
+    inputPrice: (1.75 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (14.0 / 1_000_000) * MARKUP_MULTIPLIER,
   },
   {
     id: "google/gemini-3-pro-preview",
     name: "Gemini 3 Pro",
     provider: "Google",
     color: "#4285F4",
-    inputPrice: 2.0 / 1_000_000,
-    outputPrice: 12.0 / 1_000_000,
+    inputPrice: (2.0 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (12.0 / 1_000_000) * MARKUP_MULTIPLIER,
   },
   {
     id: "deepseek/deepseek-chat-v3-0324",
     name: "DeepSeek V3",
     provider: "DeepSeek",
     color: "#4D6BFE",
-    inputPrice: 0.27 / 1_000_000,
-    outputPrice: 1.10 / 1_000_000,
+    inputPrice: (0.27 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (1.10 / 1_000_000) * MARKUP_MULTIPLIER,
   },
 ];
 

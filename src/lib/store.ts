@@ -29,6 +29,7 @@ export interface ChatMessage {
   txHash?: string;
   timestamp: number;
   cards?: ActionCard[];
+  decisionId?: string;
 }
 
 export interface PaymentCard {
@@ -135,6 +136,7 @@ interface MeterState {
 
   approveCard: (messageId: string, cardId: string) => void;
   rejectCard: (messageId: string, cardId: string) => void;
+  setMessageDecisionId: (decisionId: string) => void;
 
   setPendingInput: (v: string | null) => void;
 
@@ -587,6 +589,17 @@ export const useMeterStore = create<MeterState>()(
             }),
           };
           return { projects: replaceActiveProject(s, updated) };
+        }),
+
+      setMessageDecisionId: (decisionId) =>
+        set((s) => {
+          const active = getActiveProject(s);
+          const msgs = [...active.messages];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant") {
+            msgs[msgs.length - 1] = { ...last, decisionId };
+          }
+          return { projects: replaceActiveProject(s, { ...active, messages: msgs }) };
         }),
 
       setStreaming: (v) =>

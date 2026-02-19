@@ -158,7 +158,7 @@ async function streamAnthropic(
   const stream = await client.messages.stream({
     model: nativeModel,
     max_tokens: 8192,
-    system: systemText,
+    system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
     messages: msgs,
     tools: anthropicTools,
   });

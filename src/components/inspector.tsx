@@ -17,7 +17,7 @@ export function Inspector() {
 
   if (!inspectorOpen) return null;
 
-  const tabs = ["usage", "purchases", "decisions", "settings"] as const;
+  const tabs = ["usage", "purchases", "decisions", "controls"] as const;
 
   return (
     <>
@@ -58,7 +58,7 @@ export function Inspector() {
           {inspectorTab === "usage" && <UsageTab allProjects={projects} />}
           {inspectorTab === "purchases" && <PurchasesTab />}
           {inspectorTab === "decisions" && <DecisionsTab />}
-          {inspectorTab === "settings" && <SettingsTab email={email} />}
+          {inspectorTab === "controls" && <SettingsTab email={email} />}
         </div>
 
         <div className="border-t border-border p-4">
