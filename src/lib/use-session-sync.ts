@@ -11,9 +11,23 @@ export function useSessionSync() {
   const userId = useMeterStore((s) => s.userId);
   const projects = useMeterStore((s) => s.projects);
   const authenticated = useMeterStore((s) => s.authenticated);
+  const resetDailyIfNeeded = useMeterStore((s) => s.resetDailyIfNeeded);
   const lastSyncRef = useRef<string>("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const todayStr = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getMsUntilMidnight = () => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return midnight.getTime() - now.getTime();
+  };
 
   const mapServerMessage = (m: Record<string, unknown>) => ({
     id: m.id as string,
@@ -130,6 +144,26 @@ export function useSessionSync() {
     };
   }, [authenticated, projects, syncToServer]);
 
+  // Reset daily counters at local midnight
+  useEffect(() => {
+    if (!authenticated) return;
+
+    resetDailyIfNeeded();
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      const ms = getMsUntilMidnight() + 50;
+      timeout = setTimeout(() => {
+        resetDailyIfNeeded();
+        schedule();
+      }, ms);
+    };
+
+    schedule();
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [authenticated, resetDailyIfNeeded]);
+
   // Sync on page unload
   useEffect(() => {
     if (!authenticated) return;
@@ -187,6 +221,7 @@ export function useSessionSync() {
                 ? s.activeProjectId
                 : serverProjects[0].id,
             }));
+            useMeterStore.getState().resetDailyIfNeeded();
             const activeSessionId = serverProjects.some((p) => p.id === store.activeProjectId)
               ? store.activeProjectId
               : serverProjects[0].id;
@@ -230,6 +265,7 @@ export function useSessionSync() {
             projects: merged,
             activeProjectId: nextActiveProjectId,
           }));
+          useMeterStore.getState().resetDailyIfNeeded();
         }
 
         useWorkspaceStore.getState().upsertCompaniesFromSessions(serverSessions, nextActiveProjectId);
