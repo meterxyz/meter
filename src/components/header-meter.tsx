@@ -112,8 +112,11 @@ export function HeaderMeter() {
   const weeklyCost = useMemo(() => computePeriodCost(startOfWeek()), [computePeriodCost]);
   const monthlyCost = useMemo(() => computePeriodCost(startOfMonth()), [computePeriodCost]);
   const lifetimeCost = useMemo(
-    () => projects.reduce((sum, p) => sum + p.totalCost, 0),
-    [projects]
+    () =>
+      allMessages
+        .filter((m) => m.role === "assistant" && m.cost != null)
+        .reduce((sum, m) => sum + (m.cost ?? 0), 0),
+    [allMessages]
   );
 
   return (

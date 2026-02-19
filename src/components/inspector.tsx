@@ -100,8 +100,6 @@ interface ProjectLike {
 
 function UsageTab({ project }: { project: ProjectLike | null }) {
   const assistantMsgs = (project?.messages ?? []).filter((m) => m.role === "assistant" && m.cost !== undefined);
-  const totalCost = project?.totalCost ?? 0;
-
   const stats = useMemo(() => {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
@@ -119,6 +117,7 @@ function UsageTab({ project }: { project: ProjectLike | null }) {
       .filter((m) => m.timestamp >= monthAgo)
       .reduce((sum, m) => sum + (m.cost ?? 0), 0);
 
+    const lifetime = assistantMsgs.reduce((sum, m) => sum + (m.cost ?? 0), 0);
     const totalTokensIn = assistantMsgs.reduce((sum, m) => sum + (m.tokensIn ?? 0), 0);
     const totalTokensOut = assistantMsgs.reduce((sum, m) => sum + (m.tokensOut ?? 0), 0);
     const totalMessages = assistantMsgs.length;
@@ -132,17 +131,28 @@ function UsageTab({ project }: { project: ProjectLike | null }) {
       byModel[key] = { cost: existing.cost + (m.cost ?? 0), count: existing.count + 1 };
     }
 
-    return { today, week, month, totalTokensIn, totalTokensOut, totalMessages, settledCount, pendingCount, byModel };
+    return {
+      today,
+      week,
+      month,
+      lifetime,
+      totalTokensIn,
+      totalTokensOut,
+      totalMessages,
+      settledCount,
+      pendingCount,
+      byModel,
+    };
   }, [assistantMsgs]);
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <div className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">
-          Total Spend
+          Lifetime Spend
         </div>
         <div className="flex items-baseline gap-2 mb-3">
-          <span className="font-mono text-2xl text-foreground">${totalCost.toFixed(2)}</span>
+          <span className="font-mono text-2xl text-foreground">${stats.lifetime.toFixed(2)}</span>
         </div>
         <div className="space-y-1 font-mono text-[11px]">
           <div className="flex justify-between">

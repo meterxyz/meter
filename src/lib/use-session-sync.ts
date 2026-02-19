@@ -36,6 +36,10 @@ export function useSessionSync() {
     const messages = Array.isArray(session.messages)
       ? session.messages.map((m: Record<string, unknown>) => mapServerMessage(m))
       : [];
+    const totalFromMessages = messages
+      .filter((m) => m.role === "assistant" && m.cost != null)
+      .reduce((sum, m) => sum + (m.cost ?? 0), 0);
+    const totalFromSession = Number(session.total_cost ?? 0);
 
     return {
       id: session.id as string,
@@ -50,7 +54,7 @@ export function useSessionSync() {
       todayMessageCount: Number(session.today_message_count ?? 0),
       todayByModel: {},
       todayDate: (session.today_date as string) ?? todayStr(),
-      totalCost: Number(session.total_cost ?? 0),
+      totalCost: Math.max(totalFromSession, totalFromMessages),
     };
   };
 
