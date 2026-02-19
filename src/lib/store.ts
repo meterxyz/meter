@@ -130,6 +130,7 @@ interface MeterState {
   logout: () => void;
 
   addProject: (name: string, id?: string) => void;
+  removeProject: (id: string) => void;
   setActiveProject: (id: string) => void;
 
   addMessage: (msg: ChatMessage) => void;
@@ -350,6 +351,16 @@ export const useMeterStore = create<MeterState>()(
           const id = idOverride ?? cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
           if (s.projects.some((p) => p.id === id)) return s;
           return { projects: [...s.projects, createProject(id, cleanName)] };
+        }),
+
+      removeProject: (id) =>
+        set((s) => {
+          const remaining = s.projects.filter((p) => p.id !== id);
+          const nextActiveId =
+            s.activeProjectId === id
+              ? remaining[0]?.id ?? "meter"
+              : s.activeProjectId;
+          return { projects: remaining, activeProjectId: nextActiveId };
         }),
 
       setActiveProject: (id) =>

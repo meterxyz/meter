@@ -12,9 +12,6 @@ export function ActionsBar() {
   const activeProjectId = useMeterStore((s) => s.activeProjectId);
   const approveCard = useMeterStore((s) => s.approveCard);
   const rejectCard = useMeterStore((s) => s.rejectCard);
-  const getPendingBalance = useMeterStore((s) => s.getPendingBalance);
-  const settleAll = useMeterStore((s) => s.settleAll);
-  const isSettling = useMeterStore((s) => s.isSettling);
   const setInspectorOpen = useMeterStore((s) => s.setInspectorOpen);
   const setInspectorTab = useMeterStore((s) => s.setInspectorTab);
 
@@ -50,8 +47,7 @@ export function ActionsBar() {
     return actions;
   }, [activeProject]);
 
-  const pendingBalance = getPendingBalance();
-  const totalPending = pendingActions.length + undecided.length + (pendingBalance > 0.01 ? 1 : 0);
+  const totalPending = pendingActions.length + undecided.length;
 
   useEffect(() => {
     if (!open) return;
@@ -63,15 +59,6 @@ export function ActionsBar() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
-
-  const [settleSuccess, setSettleSuccess] = useState(false);
-  const handleSettle = async () => {
-    const result = await settleAll();
-    if (result.success) {
-      setSettleSuccess(true);
-      setTimeout(() => setSettleSuccess(false), 2000);
-    }
-  };
 
   const openDecisions = () => {
     setOpen(false);
@@ -171,33 +158,11 @@ export function ActionsBar() {
             </div>
           )}
 
-          {pendingBalance > 0.01 && (
-            <div className="border-b border-border/30 px-3 py-2">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
-                Outstanding Balance
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-sm tabular-nums text-foreground">${pendingBalance.toFixed(2)}</span>
-              </div>
-              <button
-                onClick={handleSettle}
-                disabled={isSettling}
-                className={`w-full rounded-lg py-1.5 font-mono text-[10px] transition-colors ${
-                  settleSuccess
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                    : "bg-foreground text-background hover:bg-foreground/90 disabled:opacity-40"
-                }`}
-              >
-                {settleSuccess ? "Settled" : isSettling ? "Processing..." : `Pay & Settle $${pendingBalance.toFixed(2)}`}
-              </button>
-            </div>
-          )}
-
           {totalPending === 0 && (
             <div className="px-3 py-4 text-center">
               <p className="font-mono text-[11px] text-muted-foreground/40">Nothing to approve</p>
               <p className="mt-1 font-mono text-[10px] text-muted-foreground/30">
-                Actions, decisions, and settlements appear here
+                Actions and decisions appear here
               </p>
             </div>
           )}

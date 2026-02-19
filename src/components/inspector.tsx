@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useMeterStore, ChatMessage, PaymentCard } from "@/lib/store";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 import { useDecisionsStore, Decision } from "@/lib/decisions-store";
 import { CONNECTORS } from "@/lib/connectors";
 import { isApiKeyProvider, initiateOAuthFlow } from "@/lib/oauth-client";
@@ -18,15 +19,64 @@ export function Inspector() {
     setInspectorTab,
     projects,
     activeProjectId,
+    userId,
+    removeProject,
   } = useMeterStore();
 
+  const activeCompanyId = useWorkspaceStore((s) => s.activeCompanyId);
+  const companies = useWorkspaceStore((s) => s.companies);
+  const deleteCompany = useWorkspaceStore((s) => s.deleteCompany);
+  const setActiveCompany = useWorkspaceStore((s) => s.setActiveCompany);
+
+  const activeCompany = companies.find((c) => c.id === activeCompanyId) ?? null;
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!INSPECTOR_TABS.includes(inspectorTab as typeof INSPECTOR_TABS[number])) {
       setInspectorTab("decisions");
     }
   }, [inspectorTab, setInspectorTab]);
+
+  const handleDeleteWorkspace = async () => {
+    if (!activeCompany) return;
+    setDeleting(true);
+
+    // Delete server-side session
+    const sessionId = activeCompany.sessionId;
+    if (sessionId && userId) {
+      try {
+        await fetch(
+          `/api/sessions?sessionId=${encodeURIComponent(sessionId)}&userId=${encodeURIComponent(userId)}`,
+          { method: "DELETE" }
+        );
+      } catch {
+        // Continue with local deletion even if server fails
+      }
+    }
+
+    // Remove from local stores
+    if (sessionId) removeProject(sessionId);
+    const companyId = activeCompany.id;
+    deleteCompany(companyId);
+
+    // Switch to next available workspace
+    const remaining = companies.filter((c) => c.id !== companyId);
+    if (remaining.length > 0) {
+      setActiveCompany(remaining[0].id);
+      const nextSession = remaining[0].sessionId;
+      if (nextSession) {
+        const { setActiveProject } = useMeterStore.getState();
+        setActiveProject(nextSession);
+      }
+    }
+
+    setConfirmingDelete(false);
+    setDeleting(false);
+    setInspectorOpen(false);
+  };
 
   if (!inspectorOpen) return null;
 
@@ -71,6 +121,40 @@ export function Inspector() {
           {inspectorTab === "controls" && <SettingsTab activeProjectId={activeProject?.id ?? null} />}
           {inspectorTab === "connections" && <ConnectionsTab />}
         </div>
+
+        {activeCompany && (
+          <div className="border-t border-border px-4 py-3">
+            {confirmingDelete ? (
+              <div className="flex flex-col gap-2">
+                <p className="font-mono text-[11px] text-red-400">
+                  Delete &ldquo;{activeCompany.name}&rdquo;? This removes all messages and data for this workspace.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeleteWorkspace}
+                    disabled={deleting}
+                    className="flex-1 rounded-md bg-red-500/10 border border-red-500/20 py-1.5 font-mono text-[11px] text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+                  >
+                    {deleting ? "Deleting..." : "Confirm Delete"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDelete(false)}
+                    className="flex-1 rounded-md border border-border py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-foreground/5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="w-full rounded-md py-1.5 font-mono text-[11px] text-muted-foreground/50 transition-colors hover:text-red-400 hover:bg-red-500/5"
+              >
+                Delete workspace
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
