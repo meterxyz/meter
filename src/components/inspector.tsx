@@ -643,7 +643,7 @@ function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
         )}
       </div>
       <AddCardModal open={addCardOpen} onClose={() => setAddCardOpen(false)} />
-    </>
+    </div>
   );
 }
 
