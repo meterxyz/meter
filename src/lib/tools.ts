@@ -4,7 +4,7 @@ import { getValidAccessToken } from "@/lib/oauth";
 import { searchEmails, readEmail } from "@/lib/connectors/gmail";
 import { listRepos, createRepo, createIssue } from "@/lib/connectors/github";
 import { listDeployments, triggerDeployment } from "@/lib/connectors/vercel";
-import { listPayments, getBalance, listSubscriptions } from "@/lib/connectors/stripe";
+import { listPayments, getBalance, listSubscriptions, createPayout } from "@/lib/connectors/stripe";
 import { getAccounts as mercuryGetAccounts, listTransactions as mercuryListTransactions } from "@/lib/connectors/mercury";
 import { listTransactions as rampListTransactions, getSpendingSummary as rampGetSpendingSummary } from "@/lib/connectors/ramp";
 import { supabaseQuery, supabaseListTables } from "@/lib/connectors/supabase-connector";
@@ -208,6 +208,13 @@ export async function executeTool(
     case "stripe_list_subscriptions":
       return withConnectorToken("stripe", ctx, async (token) =>
         listSubscriptions(token, { status: args.status as string | undefined })
+      );
+    case "stripe_create_payout":
+      return withConnectorToken("stripe", ctx, async (token) =>
+        createPayout(token, {
+          amount: args.amount as number | undefined,
+          currency: args.currency as string | undefined,
+        })
       );
     // Mercury
     case "mercury_get_accounts":
