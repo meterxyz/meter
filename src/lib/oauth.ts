@@ -196,6 +196,7 @@ export async function exchangeCodeForToken(
 export async function storeToken(
   userId: string,
   provider: string,
+  workspaceId: string,
   tokenData: TokenResponse,
   metadata?: Record<string, unknown> | null
 ): Promise<void> {
@@ -210,6 +211,7 @@ export async function storeToken(
       id,
       user_id: userId,
       provider,
+      workspace_id: workspaceId,
       access_token: encryptToken(tokenData.access_token),
       refresh_token: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : null,
       expires_at: expiresAt,
@@ -217,13 +219,14 @@ export async function storeToken(
       metadata: metadata ?? null,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id,provider" }
+    { onConflict: "user_id,provider,workspace_id" }
   );
 }
 
 export async function storeApiKey(
   userId: string,
   provider: string,
+  workspaceId: string,
   apiKey: string,
   metadata?: Record<string, unknown> | null
 ): Promise<void> {
@@ -235,6 +238,7 @@ export async function storeApiKey(
       id,
       user_id: userId,
       provider,
+      workspace_id: workspaceId,
       access_token: encryptToken(apiKey),
       refresh_token: null,
       expires_at: null,
@@ -242,13 +246,14 @@ export async function storeApiKey(
       metadata: metadata ?? null,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id,provider" }
+    { onConflict: "user_id,provider,workspace_id" }
   );
 }
 
 export async function getTokenRecord(
   userId: string,
-  provider: string
+  provider: string,
+  workspaceId: string
 ): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: string | null; metadata?: Record<string, unknown> | null } | null> {
   const supabase = getSupabaseServer();
   const { data } = await supabase
@@ -256,6 +261,7 @@ export async function getTokenRecord(
     .select("access_token, refresh_token, expires_at, metadata")
     .eq("user_id", userId)
     .eq("provider", provider)
+    .eq("workspace_id", workspaceId)
     .single();
 
   if (!data) return null;
@@ -270,9 +276,10 @@ export async function getTokenRecord(
 
 export async function getToken(
   userId: string,
-  provider: string
+  provider: string,
+  workspaceId: string
 ): Promise<{ accessToken: string; refreshToken?: string } | null> {
-  const record = await getTokenRecord(userId, provider);
+  const record = await getTokenRecord(userId, provider, workspaceId);
   if (!record) return null;
   return {
     accessToken: record.accessToken,
@@ -321,12 +328,13 @@ async function refreshAccessToken(
 
 export async function getValidAccessToken(
   userId: string,
-  providerId: string
+  providerId: string,
+  workspaceId: string
 ): Promise<{ accessToken: string; metadata?: Record<string, unknown> | null } | null> {
   const provider = OAUTH_PROVIDERS[providerId];
   if (!provider) return null;
 
-  const record = await getTokenRecord(userId, providerId);
+  const record = await getTokenRecord(userId, providerId, workspaceId);
   if (!record) return null;
 
   if (!record.expiresAt) {
@@ -352,28 +360,31 @@ export async function getValidAccessToken(
     ...refreshed,
     refresh_token: refreshed.refresh_token ?? record.refreshToken,
   };
-  await storeToken(userId, providerId, tokenData, record.metadata ?? null);
+  await storeToken(userId, providerId, workspaceId, tokenData, record.metadata ?? null);
 
   return { accessToken: tokenData.access_token, metadata: record.metadata ?? null };
 }
 
-export async function deleteToken(userId: string, provider: string): Promise<void> {
+export async function deleteToken(userId: string, provider: string, workspaceId: string): Promise<void> {
   const supabase = getSupabaseServer();
   await supabase
     .from("oauth_tokens")
     .delete()
     .eq("user_id", userId)
-    .eq("provider", provider);
+    .eq("provider", provider)
+    .eq("workspace_id", workspaceId);
 }
 
 export async function getConnectionStatus(
-  userId: string
+  userId: string,
+  workspaceId: string
 ): Promise<Record<string, boolean>> {
   const supabase = getSupabaseServer();
   const { data } = await supabase
     .from("oauth_tokens")
     .select("provider")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId);
 
   const status: Record<string, boolean> = {};
   for (const row of data ?? []) {

@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useMeterStore } from "@/lib/store";
+import { useMeterStore, selectConnectedServices } from "@/lib/store";
 import { CONNECTORS } from "@/lib/connectors";
 import { isApiKeyProvider, initiateOAuthFlow } from "@/lib/oauth-client";
 import { ApiKeyDialog } from "@/components/api-key-dialog";
 
 export function ConnectorsBar() {
-  const { connectedServices, userId, disconnectServiceRemote } = useMeterStore();
+  const connectedServices = useMeterStore(selectConnectedServices);
+  const userId = useMeterStore((s) => s.userId);
+  const activeProjectId = useMeterStore((s) => s.activeProjectId);
+  const disconnectServiceRemote = useMeterStore((s) => s.disconnectServiceRemote);
   const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +45,7 @@ export function ConnectorsBar() {
     if (isApiKeyProvider(providerId)) {
       setApiKeyProvider(providerId);
     } else {
-      initiateOAuthFlow(providerId, userId);
+      initiateOAuthFlow(providerId, userId, activeProjectId);
     }
   }
 

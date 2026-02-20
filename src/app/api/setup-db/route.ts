@@ -119,11 +119,12 @@ create table if not exists settlement_history (
   created_at timestamptz default now()
 );
 
--- OAuth tokens (encrypted)
+-- OAuth tokens (encrypted, workspace-scoped)
 create table if not exists oauth_tokens (
   id text primary key,
   user_id text not null references meter_users(id) on delete cascade,
   provider text not null,
+  workspace_id text not null,
   access_token text not null,
   refresh_token text,
   expires_at timestamptz,
@@ -131,7 +132,7 @@ create table if not exists oauth_tokens (
   metadata jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
-  unique(user_id, provider)
+  unique(user_id, provider, workspace_id)
 );
 
 -- OAuth state (CSRF protection)
@@ -139,6 +140,7 @@ create table if not exists oauth_state (
   id text primary key,
   user_id text not null,
   provider text not null,
+  workspace_id text,
   pkce_verifier text,
   expires_at timestamptz not null,
   created_at timestamptz default now()
@@ -146,6 +148,7 @@ create table if not exists oauth_state (
 
 -- Indexes
 create index if not exists idx_oauth_tokens_user on oauth_tokens(user_id);
+create index if not exists idx_oauth_tokens_workspace on oauth_tokens(workspace_id);
 create index if not exists idx_oauth_state_expires on oauth_state(expires_at);
 create index if not exists idx_meter_users_email on meter_users(email);
 create index if not exists idx_passkey_credentials_user on passkey_credentials(user_id);

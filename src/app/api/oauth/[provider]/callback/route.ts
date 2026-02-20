@@ -48,6 +48,7 @@ export async function GET(
     }
 
     const userId = stateRecord.user_id;
+    const workspaceId = stateRecord.workspace_id;
 
     // Clean up state record
     await supabase.from("oauth_state").delete().eq("id", state);
@@ -55,7 +56,7 @@ export async function GET(
     try {
       const redirectUri = `${appUrl}/api/oauth/${providerId}/callback`;
       const tokenData = await exchangeCodeForToken(provider, code, redirectUri);
-      await storeToken(userId, providerId, tokenData);
+      await storeToken(userId, providerId, workspaceId, tokenData);
 
       // Backward compat: update gmail_connected field
       if (providerId === "gmail") {

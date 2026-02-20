@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useMeterStore, ChatMessage, PaymentCard } from "@/lib/store";
+import { useMeterStore, selectConnectedServices, ChatMessage, PaymentCard } from "@/lib/store";
 import { useWorkspaceStore } from "@/lib/workspace-store";
 import { useDecisionsStore, Decision } from "@/lib/decisions-store";
 import { CONNECTORS } from "@/lib/connectors";
@@ -246,7 +246,11 @@ function SettingsTab({ activeProjectId }: { activeProjectId: string | null }) {
 
 /* ─── CONNECTIONS TAB ─── */
 function ConnectionsTab() {
-  const { connectedServices, userId, disconnectServiceRemote, connectionsLoading } = useMeterStore();
+  const connectedServices = useMeterStore(selectConnectedServices);
+  const userId = useMeterStore((s) => s.userId);
+  const activeProjectId = useMeterStore((s) => s.activeProjectId);
+  const disconnectServiceRemote = useMeterStore((s) => s.disconnectServiceRemote);
+  const connectionsLoading = useMeterStore((s) => s.connectionsLoading);
   const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
 
   const handleConnect = (providerId: string) => {
@@ -254,7 +258,7 @@ function ConnectionsTab() {
     if (isApiKeyProvider(providerId)) {
       setApiKeyProvider(providerId);
     } else {
-      initiateOAuthFlow(providerId, userId);
+      initiateOAuthFlow(providerId, userId, activeProjectId);
     }
   };
 

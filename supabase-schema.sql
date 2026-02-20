@@ -39,18 +39,19 @@ create table if not exists auth_challenges (
   created_at timestamptz default now()
 );
 
--- OAuth / API key tokens
+-- OAuth / API key tokens (workspace-scoped)
 create table if not exists oauth_tokens (
   id text primary key,
   user_id text not null references meter_users(id) on delete cascade,
   provider text not null,
+  workspace_id text not null,
   access_token text not null,
   refresh_token text,
   expires_at timestamptz,
   scopes text,
   metadata jsonb,
   updated_at timestamptz default now(),
-  unique(user_id, provider)
+  unique(user_id, provider, workspace_id)
 );
 
 -- =============================================
@@ -203,6 +204,7 @@ create index if not exists idx_meter_users_email on meter_users(email);
 create index if not exists idx_passkey_credentials_user on passkey_credentials(user_id);
 create index if not exists idx_auth_challenges_email on auth_challenges(email);
 create index if not exists idx_oauth_tokens_user on oauth_tokens(user_id);
+create index if not exists idx_oauth_tokens_workspace on oauth_tokens(workspace_id);
 create index if not exists idx_chat_messages_session on chat_messages(session_id);
 create index if not exists idx_chat_messages_timestamp on chat_messages(timestamp);
 create index if not exists idx_chat_sessions_user on chat_sessions(user_id);

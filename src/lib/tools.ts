@@ -261,11 +261,11 @@ async function withConnectorToken(
   ctx: ToolContext,
   handler: (accessToken: string, metadata?: Record<string, unknown> | null) => Promise<unknown>
 ): Promise<string> {
-  if (!ctx.userId) {
+  if (!ctx.userId || !ctx.projectId) {
     return "Missing user session. Please sign in and connect the service.";
   }
   try {
-    const token = await getValidAccessToken(ctx.userId, providerId);
+    const token = await getValidAccessToken(ctx.userId, providerId, ctx.projectId);
     if (!token) {
       return `No ${providerId} connection found. Connect it in Settings.`;
     }
