@@ -19,6 +19,8 @@ import { useSessionSync } from "@/lib/use-session-sync";
 import { useDecisionsStore } from "@/lib/decisions-store";
 import ReactMarkdown from "react-markdown";
 
+const DRAFT_KEY = (id: string) => `meter:draft:${id}`;
+
 function statusLabel(msg: ChatMessage) {
   if (msg.receiptStatus === "settled") return "Settled";
   if (msg.receiptStatus === "signed") return "Signed";
@@ -243,6 +245,7 @@ export function ChatView() {
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
   const slashRef = useRef<SlashCommandHandle>(null);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const isNearBottomRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
   const scrollAwayAtRef = useRef(0);
@@ -251,6 +254,16 @@ export function ChatView() {
 
   useEffect(() => {
     hasInitialScrolled.current = false;
+  }, [activeProjectId]);
+
+  // Restore draft from localStorage on mount / project switch
+  useEffect(() => {
+    const saved = localStorage.getItem(DRAFT_KEY(activeProjectId));
+    if (saved && inputRef.current) {
+      inputRef.current.value = saved;
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px";
+    }
   }, [activeProjectId]);
 
   const pendingInput = useMeterStore((s) => s.pendingInput);
@@ -364,6 +377,7 @@ export function ChatView() {
       const userContent = input.value.trim();
       input.value = "";
       input.style.height = "auto";
+      localStorage.removeItem(DRAFT_KEY(activeProjectId));
       isNearBottomRef.current = true;
       userScrolledAwayRef.current = false;
       addMessage({
@@ -386,6 +400,7 @@ export function ChatView() {
     const userContent = input.value.trim();
     input.value = "";
     input.style.height = "auto";
+    localStorage.removeItem(DRAFT_KEY(activeProjectId));
 
     isNearBottomRef.current = true;
     userScrolledAwayRef.current = false;
@@ -539,6 +554,14 @@ export function ChatView() {
     } else {
       if (slashOpen) { setSlashOpen(false); setSlashQuery(""); }
     }
+
+    // Debounced draft save
+    clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      const v = inputRef.current?.value ?? "";
+      if (v) localStorage.setItem(DRAFT_KEY(activeProjectId), v);
+      else localStorage.removeItem(DRAFT_KEY(activeProjectId));
+    }, 250);
   };
 
   const handleCommandSelect = useCallback((chatPrompt: string) => {
@@ -747,8 +770,8 @@ export function ChatView() {
         )}
 
         {/* Composer area */}
-        <div className="relative p-4">
-          <div className="mx-auto max-w-2xl">
+        <div className="p-4">
+          <div className="relative mx-auto max-w-2xl">
             {/* Slash command popover — positioned above the composer */}
             <SlashCommandPopover
               ref={slashRef}
