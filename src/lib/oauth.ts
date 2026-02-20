@@ -241,15 +241,14 @@ export async function storeApiKey(
 ): Promise<void> {
   const supabase = getSupabaseServer();
 
-  // Delete any existing token for this user/provider/workspace first,
-  // then insert. This avoids relying on a unique constraint that may
-  // not exist on older deployments.
+  // Delete any existing token for this user/provider first (regardless of
+  // workspace_id), then insert. This handles rows created with the old
+  // unique(user_id, provider) constraint that have workspace_id = ''.
   await supabase
     .from("oauth_tokens")
     .delete()
     .eq("user_id", userId)
-    .eq("provider", provider)
-    .eq("workspace_id", workspaceId);
+    .eq("provider", provider);
 
   const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
   const { error } = await supabase.from("oauth_tokens").insert({
