@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { useMeterStore, selectConnectedServices, ChatMessage } from "@/lib/store";
+import { useMeterStore, selectConnectedServices, selectWorkspaceCardReady, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { HeaderMeter } from "@/components/header-meter";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
@@ -225,7 +225,19 @@ export function ChatView() {
 
   const userId = useMeterStore((s) => s.userId);
   const cardOnFile = useMeterStore((s) => s.cardOnFile);
+  const cardLast4 = useMeterStore((s) => s.cardLast4);
+  const cardBrand = useMeterStore((s) => s.cardBrand);
+  const workspaceCardReady = useMeterStore(selectWorkspaceCardReady);
+  const setCardAssigned = useMeterStore((s) => s.setCardAssigned);
   const chatBlocked = activeProject?.chatBlocked ?? false;
+
+  const sourceWorkspaceName = useMemo(() => {
+    if (workspaceCardReady || !cardOnFile) return null;
+    const source = projects.find(
+      (p) => p.id !== activeProjectId && p.cardAssigned === true
+    );
+    return source?.name ?? null;
+  }, [workspaceCardReady, cardOnFile, projects, activeProjectId]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -371,7 +383,7 @@ export function ChatView() {
 
   const handleSend = async () => {
     const input = inputRef.current;
-    if (!input || !input.value.trim() || isStreaming || !cardOnFile) return;
+    if (!input || !input.value.trim() || isStreaming || !workspaceCardReady) return;
 
     if (chatBlocked) {
       const userContent = input.value.trim();
@@ -572,11 +584,11 @@ export function ChatView() {
     // Need a tick for the value to settle before handleSend reads it
     requestAnimationFrame(() => {
       const input = inputRef.current;
-      if (!input || !input.value.trim() || isStreaming || !cardOnFile) return;
+      if (!input || !input.value.trim() || isStreaming || !workspaceCardReady) return;
       // Trigger send by dispatching keydown
       handleSend();
     });
-  }, [isStreaming, cardOnFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isStreaming, workspaceCardReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSlashConnect = useCallback((providerId: string) => {
     if (!userId) return;
@@ -687,7 +699,8 @@ export function ChatView() {
         {/* Messages */}
         <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-2xl px-4 py-6">
-            {messages.length === 0 && !cardOnFile && (
+            {/* First-time onboarding — no card anywhere */}
+            {messages.length === 0 && !workspaceCardReady && !cardOnFile && (
               <div className="mb-4">
                 <div className="flex gap-3 justify-start">
                   <div className="relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed text-foreground">
@@ -702,7 +715,33 @@ export function ChatView() {
               </div>
             )}
 
-            {messages.length === 0 && cardOnFile && (
+            {/* New workspace — has card globally but not assigned here yet */}
+            {messages.length === 0 && !workspaceCardReady && cardOnFile && (
+              <div className="mb-4">
+                <div className="flex gap-3 justify-start">
+                  <div className="relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed text-foreground">
+                    <div className="prose prose-sm prose-invert max-w-none prose-p:my-1">
+                      <p>Welcome to <strong>{activeProject?.name ?? "this workspace"}</strong>. Add a payment method to get started, or use your existing card.</p>
+                    </div>
+                    <button
+                      onClick={() => setCardAssigned(activeProjectId)}
+                      className="mt-3 w-full rounded-lg border border-foreground/20 bg-foreground/5 py-2.5 font-mono text-xs text-foreground transition-colors hover:bg-foreground/10"
+                    >
+                      Use {cardBrand ? cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1) : "card"} ****{cardLast4 ?? ""}{sourceWorkspaceName ? ` from ${sourceWorkspaceName}` : ""}
+                    </button>
+                    <div className="my-3 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="font-mono text-[10px] text-muted-foreground/40">or add a new card</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    <InlineCardForm />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Workspace ready — can chat */}
+            {messages.length === 0 && workspaceCardReady && (
               <div className="flex flex-col items-center justify-center gap-3 py-24">
                 <p className="text-sm text-muted-foreground">What are you building in {activeProject?.name ?? "this workspace"}?</p>
                 <p className="font-mono text-[10px] text-muted-foreground/40">Every model available. The meter runs in dollars.</p>
@@ -810,8 +849,8 @@ export function ChatView() {
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
                   onChange={handleInputChange}
-                  placeholder={cardOnFile ? "Say something... (type / for commands)" : "Add a card to start chatting..."}
-                  disabled={!cardOnFile}
+                  placeholder={workspaceCardReady ? "Say something... (type / for commands)" : "Add a card to start chatting..."}
+                  disabled={!workspaceCardReady}
                   rows={1}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ maxHeight: "120px" }}
@@ -824,7 +863,7 @@ export function ChatView() {
                 <MeterPill />
                 <button
                   onClick={handleSend}
-                  disabled={isStreaming || !cardOnFile}
+                  disabled={isStreaming || !workspaceCardReady}
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
