@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 // Uses the Supabase Management API (requires SUPABASE_ACCESS_TOKEN).
 // Call once after deploying: GET https://meter.chat/api/setup-db
 
-const SCHEMA_SQL = `
--- Users
+// Phase 1: Create all tables
+const TABLES_SQL = `
 create table if not exists meter_users (
   id text primary key,
   email text unique not null,
@@ -17,7 +17,6 @@ create table if not exists meter_users (
   updated_at timestamptz default now()
 );
 
--- Passkey credentials
 create table if not exists passkey_credentials (
   credential_id text primary key,
   user_id text not null references meter_users(id) on delete cascade,
@@ -29,7 +28,6 @@ create table if not exists passkey_credentials (
   created_at timestamptz default now()
 );
 
--- Auth challenges (WebAuthn)
 create table if not exists auth_challenges (
   id text primary key,
   email text not null,
@@ -39,7 +37,6 @@ create table if not exists auth_challenges (
   created_at timestamptz default now()
 );
 
--- Chat sessions
 create table if not exists chat_sessions (
   id text primary key,
   user_id text not null,
@@ -57,7 +54,6 @@ create table if not exists chat_sessions (
   updated_at timestamptz default now()
 );
 
--- Chat messages
 create table if not exists chat_messages (
   id text primary key,
   session_id text not null references chat_sessions(id) on delete cascade,
@@ -71,7 +67,6 @@ create table if not exists chat_messages (
   created_at timestamptz default now()
 );
 
--- Workspaces
 create table if not exists workspaces (
   id text primary key,
   user_id text not null,
@@ -79,7 +74,6 @@ create table if not exists workspaces (
   created_at timestamptz default now()
 );
 
--- Workspace projects
 create table if not exists workspace_projects (
   id text primary key,
   workspace_id text not null references workspaces(id) on delete cascade,
@@ -87,7 +81,6 @@ create table if not exists workspace_projects (
   created_at timestamptz default now()
 );
 
--- Decisions
 create table if not exists decisions (
   id text primary key,
   user_id text not null,
@@ -100,7 +93,6 @@ create table if not exists decisions (
   updated_at timestamptz default now()
 );
 
--- Settlement history
 create table if not exists settlement_history (
   id text primary key,
   user_id text not null references meter_users(id) on delete cascade,
@@ -116,7 +108,6 @@ create table if not exists settlement_history (
   created_at timestamptz default now()
 );
 
--- OAuth tokens (encrypted, workspace-scoped)
 create table if not exists oauth_tokens (
   id text primary key,
   user_id text not null references meter_users(id) on delete cascade,
@@ -132,7 +123,6 @@ create table if not exists oauth_tokens (
   unique(user_id, provider, workspace_id)
 );
 
--- OAuth state (CSRF protection)
 create table if not exists oauth_state (
   id text primary key,
   user_id text not null,
@@ -142,15 +132,19 @@ create table if not exists oauth_state (
   expires_at timestamptz not null,
   created_at timestamptz default now()
 );
+`;
 
--- Alter statements for existing deployments (must run before indexes)
+// Phase 2: Add columns that may be missing on existing deployments
+const ALTERS_SQL = `
 alter table chat_sessions add column if not exists daily_limit numeric;
 alter table chat_sessions add column if not exists monthly_limit numeric;
 alter table chat_sessions add column if not exists per_txn_limit numeric;
 alter table settlement_history add column if not exists workspace_id text;
 alter table oauth_tokens add column if not exists metadata jsonb;
+`;
 
--- Indexes
+// Phase 3: Create indexes (columns must exist first)
+const INDEXES_SQL = `
 create index if not exists idx_oauth_tokens_user on oauth_tokens(user_id);
 create index if not exists idx_oauth_tokens_workspace on oauth_tokens(workspace_id);
 create index if not exists idx_oauth_state_expires on oauth_state(expires_at);
@@ -165,10 +159,30 @@ create index if not exists idx_settlement_history_user on settlement_history(use
 create index if not exists idx_settlement_history_workspace on settlement_history(workspace_id);
 `;
 
-// Extract project ref from Supabase URL (e.g. "yzjevhsacvqbcygbmewk" from "https://yzjevhsacvqbcygbmewk.supabase.co")
 function getProjectRef(url: string): string | null {
   const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
   return match?.[1] ?? null;
+}
+
+async function runQuery(
+  ref: string,
+  accessToken: string,
+  sql: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(
+    `https://api.supabase.com/v1/projects/${ref}/database/query`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ query: sql }),
+    },
+  );
+  if (res.ok) return { ok: true };
+  const errText = await res.text().catch(() => "unknown");
+  return { ok: false, error: `${res.status}: ${errText}` };
 }
 
 export async function GET() {
@@ -178,74 +192,67 @@ export async function GET() {
   if (!url) {
     return NextResponse.json(
       { error: "Missing NEXT_PUBLIC_SUPABASE_URL" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
-  // Management API (requires SUPABASE_ACCESS_TOKEN)
-  if (accessToken) {
-    const ref = getProjectRef(url);
-    if (!ref) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Could not extract project ref from NEXT_PUBLIC_SUPABASE_URL. Expected format: https://<ref>.supabase.co",
-        },
-        { status: 400 }
-      );
-    }
+  if (!accessToken) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "SUPABASE_ACCESS_TOKEN is not configured",
+        help: "Set SUPABASE_ACCESS_TOKEN in your env vars, then call GET /api/setup-db again. Get your personal access token at https://supabase.com/dashboard/account/tokens. Alternatively, copy the SQL below and paste it into your Supabase SQL Editor.",
+        schema: TABLES_SQL + ALTERS_SQL + INDEXES_SQL,
+      },
+      { status: 400 },
+    );
+  }
 
+  const ref = getProjectRef(url);
+  if (!ref) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Could not extract project ref from NEXT_PUBLIC_SUPABASE_URL. Expected format: https://<ref>.supabase.co",
+      },
+      { status: 400 },
+    );
+  }
+
+  const phases = [
+    { name: "tables", sql: TABLES_SQL },
+    { name: "alters", sql: ALTERS_SQL },
+    { name: "indexes", sql: INDEXES_SQL },
+  ];
+
+  const results: { phase: string; ok: boolean; error?: string }[] = [];
+
+  for (const phase of phases) {
     try {
-      const res = await fetch(
-        `https://api.supabase.com/v1/projects/${ref}/database/query`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ query: SCHEMA_SQL }),
-        }
-      );
-
-      if (res.ok) {
-        return NextResponse.json({
-          success: true,
-          method: "management-api",
-          message: "All tables and indexes created successfully",
-        });
-      }
-
-      const errText = await res.text().catch(() => "unknown");
-      return NextResponse.json(
-        {
-          success: false,
-          method: "management-api",
-          error: `Management API returned ${res.status}: ${errText}`,
-          help: "Check that your SUPABASE_ACCESS_TOKEN is valid. Get a new one at https://supabase.com/dashboard/account/tokens",
-        },
-        { status: 500 }
-      );
+      const result = await runQuery(ref, accessToken, phase.sql);
+      results.push({ phase: phase.name, ...result });
+      if (!result.ok) break; // stop on first failure
     } catch (err) {
-      return NextResponse.json(
-        {
-          success: false,
-          method: "management-api",
-          error: err instanceof Error ? err.message : String(err),
-        },
-        { status: 500 }
-      );
+      results.push({
+        phase: phase.name,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      break;
     }
   }
 
-  // No access token — return the schema SQL so the user can paste it manually
+  const allOk = results.every((r) => r.ok);
   return NextResponse.json(
     {
-      success: false,
-      error: "SUPABASE_ACCESS_TOKEN is not configured",
-      help: "Set SUPABASE_ACCESS_TOKEN in your env vars, then call GET /api/setup-db again. Get your personal access token at https://supabase.com/dashboard/account/tokens. Alternatively, copy the SQL below and paste it into your Supabase SQL Editor.",
-      schema: SCHEMA_SQL,
+      success: allOk,
+      method: "management-api",
+      ...(allOk
+        ? { message: "All tables, columns, and indexes created successfully" }
+        : { help: "Check the failed phase below. You can also paste the SQL manually into your Supabase SQL Editor." }),
+      results,
     },
-    { status: 400 }
+    { status: allOk ? 200 : 500 },
   );
 }
