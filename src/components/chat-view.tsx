@@ -13,6 +13,7 @@ import { SlashCommandPopover, type SlashCommandHandle } from "@/components/slash
 import { isApiKeyProvider, initiateOAuthFlow } from "@/lib/oauth-client";
 import { ApiKeyDialog } from "@/components/api-key-dialog";
 import { WorkspaceBar } from "@/components/workspace-bar";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 import { InlineCardForm } from "@/components/inline-card-form";
 import { getModel, shortModelName } from "@/lib/models";
 import { useSessionSync } from "@/lib/use-session-sync";
@@ -238,6 +239,23 @@ export function ChatView() {
     );
     return source?.name ?? null;
   }, [workspaceCardReady, cardOnFile, projects, activeProjectId]);
+
+  // Onboarding state: first-time users go workspace name → card → chat
+  const [onboardingWorkspaceName, setOnboardingWorkspaceName] = useState("");
+  const [onboardingStep, setOnboardingStep] = useState<"workspace" | "card">("workspace");
+  const createCompany = useWorkspaceStore((s) => s.createCompany);
+  const addProject = useMeterStore((s) => s.addProject);
+  const setActiveProjectChat = useMeterStore((s) => s.setActiveProject);
+
+  const handleOnboardingCreateWorkspace = () => {
+    const name = onboardingWorkspaceName.trim();
+    if (!name) return;
+    const sessionId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    createCompany(name, sessionId);
+    addProject(name, sessionId);
+    setActiveProjectChat(sessionId);
+    setOnboardingStep("card");
+  };
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -698,15 +716,47 @@ export function ChatView() {
         {/* Messages */}
         <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-2xl px-4 py-6">
-            {/* First-time onboarding — no card anywhere */}
-            {messages.length === 0 && !workspaceCardReady && !cardOnFile && (
+            {/* First-time onboarding — workspace name then card */}
+            {messages.length === 0 && !workspaceCardReady && !cardOnFile && onboardingStep === "workspace" && (
               <div className="mb-4">
                 <div className="flex gap-3 justify-start">
                   <div className="relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed text-foreground">
                     <div className="prose prose-sm prose-invert max-w-none prose-p:my-1">
                       <p>Hi, I&apos;m <strong>Meter</strong> — your AI assistant with access to every frontier model.</p>
                       <p>I can help you write code, analyze data, search the web, manage your databases, and more. Every response shows the exact cost in real time.</p>
-                      <p>To get started, add a payment method below. You won&apos;t be charged now — billing happens at $10 or monthly, whichever comes first.</p>
+                      <p>Name your first workspace to get started.</p>
+                    </div>
+                    <div className="mt-3 max-w-sm">
+                      <input
+                        type="text"
+                        value={onboardingWorkspaceName}
+                        onChange={(e) => setOnboardingWorkspaceName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleOnboardingCreateWorkspace(); }}
+                        placeholder="e.g. My Project, Research, Startup..."
+                        className="w-full rounded-lg border border-border bg-card/50 px-3 py-2.5 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-foreground/20"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleOnboardingCreateWorkspace}
+                        disabled={!onboardingWorkspaceName.trim()}
+                        className="mt-2 w-full rounded-lg bg-foreground py-2.5 font-mono text-xs text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
+                      >
+                        Create Workspace
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* First-time onboarding — card step (after workspace created) */}
+            {messages.length === 0 && !workspaceCardReady && !cardOnFile && onboardingStep === "card" && (
+              <div className="mb-4">
+                <div className="flex gap-3 justify-start">
+                  <div className="relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed text-foreground">
+                    <div className="prose prose-sm prose-invert max-w-none prose-p:my-1">
+                      <p>Great — <strong>{activeProject?.name ?? "your workspace"}</strong> is ready.</p>
+                      <p>Add a payment method to start chatting. You won&apos;t be charged now — usage settles automatically once per day at midnight.</p>
                     </div>
                     <InlineCardForm />
                   </div>

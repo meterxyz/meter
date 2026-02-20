@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, ensureStripeCustomer } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 
@@ -14,18 +14,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "paymentMethodId required" }, { status: 400 });
     }
 
-    const supabase = getSupabaseServer();
-    const { data: user } = await supabase
-      .from("meter_users")
-      .select("stripe_customer_id")
-      .eq("id", userId)
-      .single();
+    const customerId = await ensureStripeCustomer(userId);
 
-    if (!user?.stripe_customer_id) {
-      return NextResponse.json({ error: "No Stripe customer found" }, { status: 400 });
-    }
-
-    await stripe.customers.update(user.stripe_customer_id, {
+    await stripe.customers.update(customerId, {
       invoice_settings: { default_payment_method: paymentMethodId },
     });
 
@@ -33,6 +24,7 @@ export async function POST(req: NextRequest) {
     const last4 = pm.card?.last4 ?? "0000";
     const brand = pm.card?.brand ?? "unknown";
 
+    const supabase = getSupabaseServer();
     await supabase
       .from("meter_users")
       .update({ card_last4: last4, card_brand: brand, updated_at: new Date().toISOString() })

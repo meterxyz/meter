@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, ensureStripeCustomer } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 
@@ -17,19 +17,11 @@ export async function DELETE(
       return NextResponse.json({ error: "card id required" }, { status: 400 });
     }
 
+    const customerId = await ensureStripeCustomer(userId);
     const supabase = getSupabaseServer();
-    const { data: user } = await supabase
-      .from("meter_users")
-      .select("stripe_customer_id")
-      .eq("id", userId)
-      .single();
-
-    if (!user?.stripe_customer_id) {
-      return NextResponse.json({ error: "No Stripe customer found" }, { status: 400 });
-    }
 
     const methods = await stripe.customers.listPaymentMethods(
-      user.stripe_customer_id,
+      customerId,
       { type: "card", limit: 10 }
     );
 
@@ -40,7 +32,7 @@ export async function DELETE(
       );
     }
 
-    const customer = await stripe.customers.retrieve(user.stripe_customer_id);
+    const customer = await stripe.customers.retrieve(customerId);
     const isDefault =
       !customer.deleted &&
       (customer.invoice_settings?.default_payment_method === paymentMethodId ||
@@ -53,7 +45,7 @@ export async function DELETE(
       const remaining = methods.data.filter((m) => m.id !== paymentMethodId);
       if (remaining.length > 0) {
         const newDefault = remaining[0];
-        await stripe.customers.update(user.stripe_customer_id, {
+        await stripe.customers.update(customerId, {
           invoice_settings: { default_payment_method: newDefault.id },
         });
         await supabase

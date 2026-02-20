@@ -82,7 +82,7 @@ function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="rounded-lg border border-border/50 bg-card/50 px-4 py-3">
         <p className="font-mono text-[11px] text-muted-foreground/60 leading-relaxed">
           No charge now. We verify your card and save it for billing.
-          You&apos;re charged at $10 or monthly, whichever comes first.
+          Usage settles automatically once per day at midnight.
         </p>
       </div>
 

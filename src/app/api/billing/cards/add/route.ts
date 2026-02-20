@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
-import { getSupabaseServer } from "@/lib/supabase";
+import { stripe, ensureStripeCustomer } from "@/lib/stripe";
 import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -9,30 +8,7 @@ export async function POST(req: NextRequest) {
   const { userId } = auth;
 
   try {
-
-    const supabase = getSupabaseServer();
-    const { data: user } = await supabase
-      .from("meter_users")
-      .select("id, email, stripe_customer_id")
-      .eq("id", userId)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    let customerId = user.stripe_customer_id;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: { meter_user_id: userId },
-      });
-      customerId = customer.id;
-      await supabase
-        .from("meter_users")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", userId);
-    }
+    const customerId = await ensureStripeCustomer(userId);
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
