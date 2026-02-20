@@ -317,10 +317,16 @@ export const useMeterStore = create<MeterState>()(
         try {
           const res = await fetch(`/api/oauth/status?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(workspaceId)}`);
           if (res.ok) {
-            const status = await res.json();
+            const serverStatus = await res.json() as Record<string, boolean>;
             set((s) => {
               const active = getActiveProject(s);
-              const updated = { ...active, connectedServices: status };
+              // Merge: server is source of truth, but keep local true values
+              // until the server explicitly says otherwise
+              const merged: Record<string, boolean> = { ...active.connectedServices };
+              for (const [key, val] of Object.entries(serverStatus)) {
+                merged[key] = val;
+              }
+              const updated = { ...active, connectedServices: merged };
               return { projects: replaceActiveProject(s, updated) };
             });
           }
