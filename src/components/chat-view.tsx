@@ -754,24 +754,25 @@ export function ChatView() {
           </div>
         </div>
 
-        {showScrollBtn && (
-          <div className="pointer-events-none absolute bottom-24 left-0 right-0 flex justify-center" style={{ zIndex: 20 }}>
-            <button
-              onClick={scrollToBottom}
-              className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card shadow-lg transition-colors hover:bg-foreground/5"
-              title="Scroll to bottom"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <polyline points="19 12 12 19 5 12" />
-              </svg>
-            </button>
-          </div>
-        )}
-
         {/* Composer area */}
         <div className="p-4">
           <div className="relative mx-auto max-w-2xl">
+            {/* Scroll-to-bottom button — positioned above the composer */}
+            {showScrollBtn && (
+              <div className="pointer-events-none absolute bottom-full left-0 right-0 flex justify-center pb-3" style={{ zIndex: 20 }}>
+                <button
+                  onClick={scrollToBottom}
+                  className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card shadow-lg transition-colors hover:bg-foreground/5"
+                  title="Scroll to bottom"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <polyline points="19 12 12 19 5 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             {/* Slash command popover — positioned above the composer */}
             <SlashCommandPopover
               ref={slashRef}
