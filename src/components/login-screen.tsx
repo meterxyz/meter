@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMeterStore } from "@/lib/store";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 
@@ -147,26 +147,6 @@ export function LoginScreen() {
     handleContinue();
   };
 
-  const landingTheme: CSSProperties = {
-    "--background": "#f6f7f9",
-    "--foreground": "#0b0b0c",
-    "--card": "#ffffff",
-    "--card-foreground": "#0b0b0c",
-    "--popover": "#ffffff",
-    "--popover-foreground": "#0b0b0c",
-    "--primary": "#0b0b0c",
-    "--primary-foreground": "#ffffff",
-    "--secondary": "#eff1f4",
-    "--secondary-foreground": "#0b0b0c",
-    "--muted": "#f0f2f5",
-    "--muted-foreground": "#5b6168",
-    "--accent": "#eff1f4",
-    "--accent-foreground": "#0b0b0c",
-    "--border": "rgba(15, 23, 42, 0.08)",
-    "--input": "rgba(15, 23, 42, 0.12)",
-    "--ring": "rgba(15, 23, 42, 0.18)",
-  };
-
   const navItems = [
     { label: "Home", href: "#home" },
     { label: "Accounts", href: "#accounts" },
@@ -181,31 +161,31 @@ export function LoginScreen() {
   const featureCards = [
     {
       title: "Pay per thought",
-      description: "Postpaid, usage-based billing with a live meter.",
+      description: "Postpaid usage with a real-time meter. No seats, no subscriptions.",
     },
     {
       title: "Agent wallet",
-      description: "Provision a wallet so Meter can pay on your behalf.",
+      description: "Provision a wallet and card so Meter can pay on your behalf.",
     },
     {
       title: "Unified visibility",
-      description: "See usage, subscriptions, and transactions in one place.",
+      description: "Usage, subscriptions, and transactions in a single ledger.",
     },
     {
       title: "Auto-routing",
-      description: "Routes to the best model to stay fast and avoid limits.",
+      description: "Routes to the best available model to stay fast and reliable.",
     },
     {
       title: "Approvals & limits",
-      description: "Set caps and require approval for high-stakes spend.",
+      description: "Guardrails for high-stakes spend with instant approvals.",
     },
     {
       title: "Decisions logged",
-      description: "Commitments and follow-ups captured automatically.",
+      description: "Every commitment captured with owners and follow-ups.",
     },
     {
       title: "Connect your stack",
-      description: "Stripe, Mercury, Brex, Ramp, Gmail, and more.",
+      description: "Stripe, Mercury, Brex, Ramp, Gmail, and more in minutes.",
     },
     {
       title: "Multiple workspaces",
@@ -214,12 +194,10 @@ export function LoginScreen() {
   ];
 
   return (
-    <div
-      style={landingTheme}
-      className="relative min-h-screen bg-background text-foreground scroll-smooth"
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.08),transparent_55%)]" />
-      <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18),transparent_60%)] blur-3xl" />
+    <div className="relative min-h-screen bg-background text-foreground scroll-smooth overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)]" />
+      <div className="pointer-events-none absolute left-1/2 top-[-10%] h-[460px] w-[460px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_60%)] blur-3xl" />
+      <div className="pointer-events-none absolute right-[-10%] top-[20%] h-[300px] w-[300px] rounded-full bg-[radial-gradient(circle,rgba(16,185,129,0.16),transparent_60%)] blur-3xl" />
 
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-4">
@@ -240,9 +218,6 @@ export function LoginScreen() {
                 {item.label}
               </a>
             ))}
-            <a href="#get-started" className="transition-colors hover:text-foreground">
-              Get Started
-            </a>
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
@@ -282,21 +257,21 @@ export function LoginScreen() {
           className="mx-auto grid w-full max-w-6xl gap-12 px-4 pt-16 pb-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center animate-in fade-in-0 duration-700"
         >
           <div id="home" className="space-y-6">
-            <div className="space-y-3">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground/70">
-                Meter
+            <div className="space-y-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.4em] text-muted-foreground/70">
+                Meter OS
               </p>
-              <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+              <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-6xl">
                 Intelligence that pays
               </h1>
-              <p className="max-w-xl text-base text-muted-foreground/80">
-                The financial operating system for founders. Meter is the first AI
-                agent with its own card — it pays for services, manages spend, and
-                keeps every commitment logged. Postpaid, usage-based billing means
-                you pay per thought, not per month.
+              <p className="max-w-2xl text-base text-muted-foreground/80">
+                Meter is the financial operating system for founders. It is the
+                first AI agent with its own card and wallet, built to pay for
+                services, manage spend, and keep every decision in context.
               </p>
-              <p className="max-w-xl text-sm text-muted-foreground/70">
-                Connect Stripe, Mercury, Brex, Ramp, Gmail, and more. Meter
+              <p className="max-w-2xl text-sm text-muted-foreground/70">
+                Postpaid usage billing means you pay per thought, not per month.
+                Connect Stripe, Mercury, Brex, Ramp, Gmail, and more; Meter
                 auto-routes across top models to stay fast and avoid rate limits.
               </p>
             </div>
@@ -344,7 +319,7 @@ export function LoginScreen() {
               {integrations.map((item) => (
                 <span
                   key={item}
-                  className="rounded-full border border-border bg-card/70 px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70"
+                  className="rounded-full border border-border/70 bg-card/80 px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70"
                 >
                   {item}
                 </span>
@@ -353,7 +328,7 @@ export function LoginScreen() {
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <div className="rounded-3xl border border-border bg-gradient-to-br from-card to-background/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] ring-1 ring-white/5">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
                   METER_
@@ -377,12 +352,12 @@ export function LoginScreen() {
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
               <div className="flex items-center justify-between">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
                   Live Meter
                 </p>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono uppercase text-emerald-600">
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono uppercase text-emerald-400">
                   Active
                 </span>
               </div>
@@ -409,7 +384,7 @@ export function LoginScreen() {
             {featureCards.map((feature) => (
               <div
                 key={feature.title}
-                className="group rounded-2xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-sm"
+                className="group rounded-2xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-1 hover:border-foreground/30 hover:bg-card/80"
               >
                 <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
                 <p className="mt-2 text-xs text-muted-foreground/70">{feature.description}</p>
@@ -427,22 +402,23 @@ export function LoginScreen() {
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground/70">
                 01. Accounts
               </p>
-              <h2 className="text-2xl font-semibold tracking-tight">Agent wallets with spending power</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">Agent wallets with real spending power</h2>
               <p className="text-sm text-muted-foreground/70">
-                Provision an agent wallet so Meter can pay for tools, services, and
-                purchases on your behalf. Every movement is tracked and auditable.
+                Provision an agent wallet in seconds. Meter pays for tools,
+                services, and purchases while you keep every transaction tied to
+                a decision trail.
               </p>
               <ul className="space-y-2 text-sm text-muted-foreground/70">
-                <li>Instant wallet provisioning for each workspace.</li>
-                <li>Route payments through the best available model.</li>
-                <li>All transactions linked to a decision trail.</li>
+                <li>Instant provisioning per workspace.</li>
+                <li>Spending limits and approval thresholds baked in.</li>
+                <li>Every purchase linked to context and follow-ups.</li>
               </ul>
             </div>
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
               <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
                 Terminal
               </div>
-              <pre className="mt-4 rounded-xl bg-muted/70 p-4 text-[11px] leading-5 text-foreground/80">
+              <pre className="mt-4 rounded-xl border border-border/70 bg-background/60 p-4 text-[11px] leading-5 text-foreground/80">
 {`$ meter wallet create --label "Ops Agent" --workspace ws_8a3f1b
 {
   "id": "wal_4e7b2c91",
@@ -461,7 +437,7 @@ export function LoginScreen() {
           className="mx-auto w-full max-w-6xl border-t border-border/70 px-4 py-16"
         >
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
                   Controls
@@ -484,9 +460,9 @@ export function LoginScreen() {
                   <span className="font-mono text-foreground">Over $500</span>
                 </div>
               </div>
-              <div className="mt-5 rounded-xl bg-muted/70 p-4 text-xs text-muted-foreground/70">
+              <div className="mt-5 rounded-xl border border-border/70 bg-background/60 p-4 text-xs text-muted-foreground/70">
                 Meter requests approval before high-stakes purchases and logs the
-                rationale alongside each spend.
+                rationale alongside every spend.
               </div>
             </div>
 
@@ -496,8 +472,8 @@ export function LoginScreen() {
               </p>
               <h2 className="text-2xl font-semibold tracking-tight">Approvals and controls built in</h2>
               <p className="text-sm text-muted-foreground/70">
-                Set spend limits and require approval for high-stakes purchases so
-                the agent can move fast without surprises.
+                Set guardrails for high-stakes purchases so the agent can move fast
+                without surprises. Every charge hits your policy first.
               </p>
               <ul className="space-y-2 text-sm text-muted-foreground/70">
                 <li>Custom approval thresholds per workspace.</li>
@@ -519,7 +495,7 @@ export function LoginScreen() {
               </p>
               <h2 className="text-2xl font-semibold tracking-tight">Full visibility into startup spend</h2>
               <p className="text-sm text-muted-foreground/70">
-                See usage, subscriptions, and transactions in one place—across the
+                See usage, subscriptions, and transactions in one place across the
                 tools your startup already runs on.
               </p>
               <ul className="space-y-2 text-sm text-muted-foreground/70">
@@ -528,7 +504,7 @@ export function LoginScreen() {
                 <li>Monthly and daily limits tracked in real time.</li>
               </ul>
             </div>
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
               <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
                 Recent Activity
               </div>
@@ -563,21 +539,21 @@ export function LoginScreen() {
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground/70">
                 04. About
               </p>
-              <h2 className="text-2xl font-semibold tracking-tight">Built for founders who ship fast</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">Decisions and follow-ups, automatically logged</h2>
               <p className="text-sm text-muted-foreground/70">
                 Meter keeps your startup&apos;s context and commitments from getting
                 lost. Decisions, approvals, and follow-ups are captured
                 automatically so you can move fast with confidence.
               </p>
             </div>
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
               <div className="space-y-3 text-sm text-muted-foreground/70">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
                   Why Meter
                 </p>
                 <p>
                   Postpaid usage, unified spend visibility, and a programmable
-                  agent wallet — all in one operating system.
+                  agent wallet in one operating system.
                 </p>
                 <p>
                   Create multiple workspaces for separate startups, projects, and
@@ -589,13 +565,16 @@ export function LoginScreen() {
         </section>
 
         <section className="mx-auto w-full max-w-6xl border-t border-border/70 px-4 py-16">
-          <div className="rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+          <div className="rounded-3xl border border-border bg-card p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.45)] ring-1 ring-white/5">
             <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground/70">
-              Ready to get started?
+              Ready to ship faster?
             </p>
             <h3 className="mt-3 text-2xl font-semibold tracking-tight">
-              Connect your stack and let Meter run the financial layer.
+              Connect your stack, set guardrails, and let Meter run the financial layer.
             </h3>
+            <p className="mt-3 text-sm text-muted-foreground/70">
+              Start with your email. Create a passkey in seconds.
+            </p>
             <div className="mt-6 flex justify-center">
               <button
                 onClick={handleContinue}
