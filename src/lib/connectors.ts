@@ -7,6 +7,10 @@ export interface ConnectorToolDef {
     description: string;
     parameters: Record<string, unknown>;
   };
+  /** Human-readable label shown in command bar & slash popover */
+  commandLabel: string;
+  /** Natural-language prompt auto-sent as a chat message when the command is selected */
+  chatPrompt: string;
 }
 
 export interface ConnectorDef {
@@ -46,6 +50,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["query"],
           },
         },
+        commandLabel: "Search emails",
+        chatPrompt: "Search my emails",
       },
       {
         type: "function",
@@ -60,6 +66,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["email_id"],
           },
         },
+        commandLabel: "Read email",
+        chatPrompt: "Read my latest email",
       },
     ],
   },
@@ -92,6 +100,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["name"],
           },
         },
+        commandLabel: "Create repo",
+        chatPrompt: "Create a new GitHub repository",
       },
       {
         type: "function",
@@ -100,6 +110,8 @@ export const CONNECTORS: ConnectorDef[] = [
           description: "List the user's GitHub repositories.",
           parameters: { type: "object", properties: {} },
         },
+        commandLabel: "List repos",
+        chatPrompt: "List my GitHub repositories",
       },
       {
         type: "function",
@@ -119,6 +131,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["repo", "title"],
           },
         },
+        commandLabel: "Create issue",
+        chatPrompt: "Create a GitHub issue",
       },
     ],
   },
@@ -146,6 +160,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["project"],
           },
         },
+        commandLabel: "Deploy",
+        chatPrompt: "Deploy my Vercel project",
       },
       {
         type: "function",
@@ -163,6 +179,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["project"],
           },
         },
+        commandLabel: "List deployments",
+        chatPrompt: "Show me my recent Vercel deployments",
       },
     ],
   },
@@ -193,6 +211,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "List payments",
+        chatPrompt: "Show me my recent Stripe payments",
       },
       {
         type: "function",
@@ -201,6 +221,8 @@ export const CONNECTORS: ConnectorDef[] = [
           description: "Get current Stripe account balance and pending amounts.",
           parameters: { type: "object", properties: {} },
         },
+        commandLabel: "Get balance",
+        chatPrompt: "What's my Stripe balance?",
       },
       {
         type: "function",
@@ -217,6 +239,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "List subscriptions",
+        chatPrompt: "Show me my active Stripe subscriptions",
       },
     ],
   },
@@ -235,6 +259,8 @@ export const CONNECTORS: ConnectorDef[] = [
           description: "List Mercury bank accounts with balances.",
           parameters: { type: "object", properties: {} },
         },
+        commandLabel: "Get accounts",
+        chatPrompt: "Show me my Mercury bank accounts",
       },
       {
         type: "function",
@@ -255,6 +281,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "List transactions",
+        chatPrompt: "Show me my recent Mercury transactions",
       },
     ],
   },
@@ -281,6 +309,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "List expenses",
+        chatPrompt: "Show me my recent Ramp expenses",
       },
       {
         type: "function",
@@ -297,6 +327,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "Spending summary",
+        chatPrompt: "Show me my Ramp spending summary for this month",
       },
     ],
   },
@@ -322,6 +354,8 @@ export const CONNECTORS: ConnectorDef[] = [
             required: ["query"],
           },
         },
+        commandLabel: "Run query",
+        chatPrompt: "Run a query on my Supabase database",
       },
       {
         type: "function",
@@ -330,6 +364,8 @@ export const CONNECTORS: ConnectorDef[] = [
           description: "List all tables in the user's Supabase database.",
           parameters: { type: "object", properties: {} },
         },
+        commandLabel: "List tables",
+        chatPrompt: "List my Supabase database tables",
       },
     ],
   },
@@ -354,6 +390,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "Query events",
+        chatPrompt: "Show me recent PostHog events",
       },
       {
         type: "function",
@@ -367,6 +405,8 @@ export const CONNECTORS: ConnectorDef[] = [
             },
           },
         },
+        commandLabel: "Get insights",
+        chatPrompt: "Show me my PostHog insights",
       },
     ],
   },

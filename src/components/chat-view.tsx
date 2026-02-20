@@ -8,7 +8,10 @@ import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker"
 import { Inspector } from "@/components/inspector";
 import { ProfileSettings } from "@/components/profile-settings";
 import { ActionCard } from "@/components/action-card";
-import { ActionsBar } from "@/components/actions-bar";
+import { CommandBar } from "@/components/command-bar";
+import { SlashCommandPopover, type SlashCommandHandle } from "@/components/slash-command";
+import { isApiKeyProvider, initiateOAuthFlow } from "@/lib/oauth-client";
+import { ApiKeyDialog } from "@/components/api-key-dialog";
 import { WorkspaceBar } from "@/components/workspace-bar";
 import { InlineCardForm } from "@/components/inline-card-form";
 import { getModel, shortModelName } from "@/lib/models";
@@ -235,6 +238,10 @@ export function ChatView() {
   const logoMenuRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
+  const slashRef = useRef<SlashCommandHandle>(null);
   const isNearBottomRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
   const scrollAwayAtRef = useRef(0);
@@ -510,11 +517,51 @@ export function ChatView() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // When slash popover is open, forward navigation keys
+    if (slashOpen && slashRef.current) {
+      const consumed = slashRef.current.handleKey(e.key);
+      if (consumed) { e.preventDefault(); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    if (val.startsWith("/")) {
+      setSlashOpen(true);
+      setSlashQuery(val.slice(1));
+    } else {
+      if (slashOpen) { setSlashOpen(false); setSlashQuery(""); }
+    }
+  };
+
+  const handleCommandSelect = useCallback((chatPrompt: string) => {
+    if (!inputRef.current) return;
+    inputRef.current.value = chatPrompt;
+    setSlashOpen(false);
+    setSlashQuery("");
+    // Need a tick for the value to settle before handleSend reads it
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input || !input.value.trim() || isStreaming || !cardOnFile) return;
+      // Trigger send by dispatching keydown
+      handleSend();
+    });
+  }, [isStreaming, cardOnFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSlashConnect = useCallback((providerId: string) => {
+    if (!userId) return;
+    if (isApiKeyProvider(providerId)) {
+      setApiKeyProvider(providerId);
+    } else {
+      initiateOAuthFlow(providerId, userId, activeProjectId);
+    }
+    setSlashOpen(false);
+    setSlashQuery("");
+  }, [userId, activeProjectId]);
 
   // Consume pendingInput from store (e.g. decision revisit) — send directly
   useEffect(() => {
@@ -697,12 +744,23 @@ export function ChatView() {
         )}
 
         {/* Composer area */}
-        <div className="p-4">
+        <div className="relative p-4">
           <div className="mx-auto max-w-2xl">
+            {/* Slash command popover — positioned above the composer */}
+            <SlashCommandPopover
+              ref={slashRef}
+              open={slashOpen}
+              query={slashQuery}
+              connectedServices={connectedServices}
+              onSelect={handleCommandSelect}
+              onConnect={handleSlashConnect}
+              onClose={() => { setSlashOpen(false); setSlashQuery(""); if (inputRef.current) inputRef.current.value = ""; }}
+            />
+
             {/* Unified box */}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
-              {/* Actions bar — top section */}
-              <ActionsBar />
+              {/* Command bar — top section (connections + commands) */}
+              <CommandBar onSelectCommand={handleCommandSelect} />
 
               {/* Model picker + composer area */}
               <div ref={modelPickerRef}>
@@ -724,7 +782,8 @@ export function ChatView() {
                 <textarea
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
-                  placeholder={cardOnFile ? "Say something..." : "Add a card to start chatting..."}
+                  onChange={handleInputChange}
+                  placeholder={cardOnFile ? "Say something... (type / for commands)" : "Add a card to start chatting..."}
                   disabled={!cardOnFile}
                   rows={1}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
@@ -757,6 +816,13 @@ export function ChatView() {
       </div>
 
       <Inspector />
+
+      {apiKeyProvider && (
+        <ApiKeyDialog
+          provider={apiKeyProvider}
+          onClose={() => setApiKeyProvider(null)}
+        />
+      )}
     </div>
   );
 }
