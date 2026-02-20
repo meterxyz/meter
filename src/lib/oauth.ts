@@ -201,26 +201,32 @@ export async function storeToken(
   metadata?: Record<string, unknown> | null
 ): Promise<void> {
   const supabase = getSupabaseServer();
+
+  // Delete-then-insert to avoid relying on unique constraint
+  await supabase
+    .from("oauth_tokens")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", provider)
+    .eq("workspace_id", workspaceId);
+
   const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
   const expiresAt = tokenData.expires_in
     ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
     : null;
 
-  const { error } = await supabase.from("oauth_tokens").upsert(
-    {
-      id,
-      user_id: userId,
-      provider,
-      workspace_id: workspaceId,
-      access_token: encryptToken(tokenData.access_token),
-      refresh_token: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : null,
-      expires_at: expiresAt,
-      scopes: tokenData.scope ?? null,
-      metadata: metadata ?? null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,provider,workspace_id" }
-  );
+  const { error } = await supabase.from("oauth_tokens").insert({
+    id,
+    user_id: userId,
+    provider,
+    workspace_id: workspaceId,
+    access_token: encryptToken(tokenData.access_token),
+    refresh_token: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : null,
+    expires_at: expiresAt,
+    scopes: tokenData.scope ?? null,
+    metadata: metadata ?? null,
+    updated_at: new Date().toISOString(),
+  });
   if (error) {
     throw new Error(`Failed to store token for ${provider}: ${error.message}`);
   }
@@ -234,23 +240,30 @@ export async function storeApiKey(
   metadata?: Record<string, unknown> | null
 ): Promise<void> {
   const supabase = getSupabaseServer();
-  const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
 
-  const { error } = await supabase.from("oauth_tokens").upsert(
-    {
-      id,
-      user_id: userId,
-      provider,
-      workspace_id: workspaceId,
-      access_token: encryptToken(apiKey),
-      refresh_token: null,
-      expires_at: null,
-      scopes: null,
-      metadata: metadata ?? null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,provider,workspace_id" }
-  );
+  // Delete any existing token for this user/provider/workspace first,
+  // then insert. This avoids relying on a unique constraint that may
+  // not exist on older deployments.
+  await supabase
+    .from("oauth_tokens")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", provider)
+    .eq("workspace_id", workspaceId);
+
+  const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
+  const { error } = await supabase.from("oauth_tokens").insert({
+    id,
+    user_id: userId,
+    provider,
+    workspace_id: workspaceId,
+    access_token: encryptToken(apiKey),
+    refresh_token: null,
+    expires_at: null,
+    scopes: null,
+    metadata: metadata ?? null,
+    updated_at: new Date().toISOString(),
+  });
   if (error) {
     throw new Error(`Failed to store API key for ${provider}: ${error.message}`);
   }
