@@ -5,6 +5,10 @@ import { searchEmails, readEmail } from "@/lib/connectors/gmail";
 import { listRepos, createRepo, createIssue } from "@/lib/connectors/github";
 import { listDeployments, triggerDeployment } from "@/lib/connectors/vercel";
 import { listPayments, getBalance, listSubscriptions } from "@/lib/connectors/stripe";
+import { getAccounts as mercuryGetAccounts, listTransactions as mercuryListTransactions } from "@/lib/connectors/mercury";
+import { listTransactions as rampListTransactions, getSpendingSummary as rampGetSpendingSummary } from "@/lib/connectors/ramp";
+import { supabaseQuery, supabaseListTables } from "@/lib/connectors/supabase-connector";
+import { queryEvents as posthogQueryEvents, getInsights as posthogGetInsights } from "@/lib/connectors/posthog";
 
 /* ─── Tool schemas (OpenAI function-calling format) ─────────────── */
 
@@ -199,16 +203,48 @@ export async function executeTool(
       return withConnectorToken("stripe", ctx, async (token) =>
         listSubscriptions(token, { status: args.status as string | undefined })
       );
-    // Connector tools — placeholder implementations
+    // Mercury
     case "mercury_get_accounts":
+      return withConnectorToken("mercury", ctx, async (token) =>
+        mercuryGetAccounts(token)
+      );
     case "mercury_list_transactions":
+      return withConnectorToken("mercury", ctx, async (token) =>
+        mercuryListTransactions(token, {
+          limit: args.limit as number | undefined,
+          account_id: args.account_id as string | undefined,
+        })
+      );
+    // Ramp
     case "ramp_list_transactions":
+      return withConnectorToken("ramp", ctx, async (token) =>
+        rampListTransactions(token, { limit: args.limit as number | undefined })
+      );
     case "ramp_get_spending_summary":
+      return withConnectorToken("ramp", ctx, async (token) =>
+        rampGetSpendingSummary(token, { period: args.period as string | undefined })
+      );
+    // Supabase
     case "supabase_query":
+      return withConnectorToken("supabase", ctx, async (token, metadata) =>
+        supabaseQuery(token, args.query as string, metadata)
+      );
     case "supabase_list_tables":
+      return withConnectorToken("supabase", ctx, async (token, metadata) =>
+        supabaseListTables(token, metadata)
+      );
+    // PostHog
     case "posthog_query_events":
+      return withConnectorToken("posthog", ctx, async (token) =>
+        posthogQueryEvents(token, {
+          event: args.event as string | undefined,
+          limit: args.limit as number | undefined,
+        })
+      );
     case "posthog_get_insights":
-      return `[${name}] This connector tool is not yet implemented. The service needs to be fully connected first.`;
+      return withConnectorToken("posthog", ctx, async (token) =>
+        posthogGetInsights(token, { limit: args.limit as number | undefined })
+      );
     default:
       return `Unknown tool: ${name}`;
   }
