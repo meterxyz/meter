@@ -30,6 +30,7 @@ interface DecisionsState {
   resolveDecision: (id: string, choice: string, reasoning?: string) => void;
   reopenDecision: (id: string) => void;
   archiveDecision: (id: string) => void;
+  fetchDecisions: () => Promise<void>;
 }
 
 function generateId() {
@@ -97,6 +98,27 @@ export const useDecisionsStore = create<DecisionsState>()(
               : d
           ),
         })),
+
+      fetchDecisions: async () => {
+        try {
+          const res = await fetch("/api/decisions");
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.decisions?.length) return;
+
+          const serverDecisions = data.decisions as Decision[];
+
+          set((s) => {
+            // Merge: server decisions that aren't already in local store
+            const localIds = new Set(s.decisions.map((d) => d.id));
+            const newFromServer = serverDecisions.filter((d) => !localIds.has(d.id));
+            if (newFromServer.length === 0) return s;
+            return { decisions: [...newFromServer, ...s.decisions] };
+          });
+        } catch {
+          // Silent fail — localStorage still works as fallback
+        }
+      },
     }),
     {
       name: "decisions-store-v1",
