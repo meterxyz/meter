@@ -4,20 +4,34 @@ import { getSupabaseServer } from "@/lib/supabase";
 import { batchSettle, SettlementItem } from "@/lib/base";
 import { requireAuth } from "@/lib/auth";
 
+function scopedSessionId(userId: string, localId: string): string {
+  if (localId.startsWith(`${userId}:`)) return localId;
+  return `${userId}:${localId}`;
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   const { userId } = auth;
 
+  const { stripeCustomerId, workspaceId, amount, messageIds, chargeIds } = await req.json();
+
+  if (!workspaceId || !amount || amount <= 0) {
+    return NextResponse.json({ error: "workspaceId and positive amount required" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServer();
+  const dbSessionId = scopedSessionId(userId, workspaceId);
+
+  async function markSettlementFailed() {
+    await supabase
+      .from("chat_sessions")
+      .update({ settlement_failed: true })
+      .eq("id", dbSessionId)
+      .eq("user_id", userId);
+  }
+
   try {
-    const { stripeCustomerId, workspaceId, amount, messageIds, chargeIds } = await req.json();
-
-    if (!workspaceId || !amount || amount <= 0) {
-      return NextResponse.json({ error: "workspaceId and positive amount required" }, { status: 400 });
-    }
-
-    const supabase = getSupabaseServer();
-
     // Resolve Stripe customer ID
     let customerId = stripeCustomerId;
     if (!customerId) {
@@ -62,6 +76,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (paymentIntent.status !== "succeeded") {
+      await markSettlementFailed();
       return NextResponse.json(
         { error: "Payment not succeeded", status: paymentIntent.status },
         { status: 402 }
@@ -116,6 +131,13 @@ export async function POST(req: NextRequest) {
       status: "succeeded",
     }).then(() => {}, (e: unknown) => console.error("Failed to write settlement history:", e));
 
+    // Clear settlement_failed flag on success
+    await supabase
+      .from("chat_sessions")
+      .update({ settlement_failed: false })
+      .eq("id", dbSessionId)
+      .eq("user_id", userId);
+
     return NextResponse.json({
       success: true,
       paymentIntentId: paymentIntent.id,
@@ -127,6 +149,7 @@ export async function POST(req: NextRequest) {
     console.error("Settlement error:", message);
 
     if (message.includes("authentication_required") || message.includes("card_declined")) {
+      await markSettlementFailed().catch(() => {});
       return NextResponse.json({ error: "Payment failed: " + message }, { status: 402 });
     }
 

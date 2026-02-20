@@ -72,6 +72,7 @@ create table if not exists chat_sessions (
   daily_limit numeric,
   monthly_limit numeric,
   per_txn_limit numeric,
+  settlement_failed boolean default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

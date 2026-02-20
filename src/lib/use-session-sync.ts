@@ -28,6 +28,7 @@ export function useSessionSync() {
   const projects = useMeterStore((s) => s.projects);
   const authenticated = useMeterStore((s) => s.authenticated);
   const resetDailyIfNeeded = useMeterStore((s) => s.resetDailyIfNeeded);
+  const attemptDailySettlement = useMeterStore((s) => s.attemptDailySettlement);
   const lastSyncRef = useRef<string>("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const todayStr = () => {
@@ -163,16 +164,18 @@ export function useSessionSync() {
     };
   }, [authenticated, projects, syncToServer]);
 
-  // Reset daily counters at local midnight
+  // Reset daily counters at local midnight + attempt settlement
   useEffect(() => {
     if (!authenticated) return;
 
     resetDailyIfNeeded();
+    attemptDailySettlement();
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => {
       const ms = getMsUntilMidnight() + 50;
       timeout = setTimeout(() => {
         resetDailyIfNeeded();
+        attemptDailySettlement();
         schedule();
       }, ms);
     };
@@ -181,7 +184,7 @@ export function useSessionSync() {
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [authenticated, resetDailyIfNeeded]);
+  }, [authenticated, resetDailyIfNeeded, attemptDailySettlement]);
 
   // Sync on page unload
   useEffect(() => {
@@ -242,6 +245,7 @@ export function useSessionSync() {
                 : serverProjects[0].id,
             }));
             useMeterStore.getState().resetDailyIfNeeded();
+            useMeterStore.getState().attemptDailySettlement();
             const activeSessionId = serverProjects.some((p) => p.id === store.activeProjectId)
               ? store.activeProjectId
               : serverProjects[0].id;
@@ -286,6 +290,7 @@ export function useSessionSync() {
             activeProjectId: nextActiveProjectId,
           }));
           useMeterStore.getState().resetDailyIfNeeded();
+          useMeterStore.getState().attemptDailySettlement();
         }
 
         useWorkspaceStore.getState().upsertCompaniesFromSessions(serverSessions, nextActiveProjectId);
