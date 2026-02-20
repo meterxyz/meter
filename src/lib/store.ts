@@ -77,6 +77,7 @@ interface ProjectThread {
   todayDate: string;
   totalCost: number;
   connectedServices: Record<string, boolean>;
+  cardAssigned?: boolean;
 }
 
 interface MeterState {
@@ -133,6 +134,7 @@ interface MeterState {
   addProject: (name: string, id?: string) => void;
   removeProject: (id: string) => void;
   setActiveProject: (id: string) => void;
+  setCardAssigned: (projectId: string) => void;
 
   addMessage: (msg: ChatMessage) => void;
   updateLastAssistantMessage: (content: string, tokensOut: number) => void;
@@ -199,6 +201,7 @@ function createProject(id: string, name: string): ProjectThread {
     todayDate: todayStr(),
     totalCost: 0,
     connectedServices: {},
+    cardAssigned: false,
   };
 }
 
@@ -285,7 +288,17 @@ export const useMeterStore = create<MeterState>()(
       inspectorTab: "decisions",
 
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
-      setCardOnFile: (v, last4, brand) => set({ cardOnFile: v, cardLast4: last4 ?? null, cardBrand: brand ?? null }),
+      setCardOnFile: (v, last4, brand) =>
+        set((s) => ({
+          cardOnFile: v,
+          cardLast4: last4 ?? null,
+          cardBrand: brand ?? null,
+          ...(v ? {
+            projects: s.projects.map((p) =>
+              p.id === s.activeProjectId ? { ...p, cardAssigned: true } : p
+            ),
+          } : {}),
+        })),
       setStripeCustomerId: (id) => set({ stripeCustomerId: id }),
       connectService: (id) => {
         set((s) => {
@@ -434,6 +447,13 @@ export const useMeterStore = create<MeterState>()(
         // Re-fetch connection status for the newly active workspace
         get().fetchConnectionStatus();
       },
+
+      setCardAssigned: (projectId) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId ? { ...p, cardAssigned: true } : p
+          ),
+        })),
 
       addMessage: (msg) =>
         set((s) => {
@@ -917,4 +937,12 @@ export const useMeterStore = create<MeterState>()(
 export const selectConnectedServices = (s: MeterState) => {
   const active = s.projects.find((p) => p.id === s.activeProjectId);
   return active?.connectedServices ?? {};
+};
+
+/** Selector: whether the active workspace has card access */
+export const selectWorkspaceCardReady = (s: MeterState): boolean => {
+  const active = s.projects.find((p) => p.id === s.activeProjectId);
+  if (!active) return s.cardOnFile;
+  if (active.cardAssigned === undefined) return s.cardOnFile;
+  return active.cardAssigned;
 };
