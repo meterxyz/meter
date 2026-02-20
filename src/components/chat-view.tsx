@@ -770,8 +770,8 @@ export function ChatView() {
         )}
 
         {/* Composer area */}
-        <div className="relative p-4">
-          <div className="mx-auto max-w-2xl">
+        <div className="p-4">
+          <div className="relative mx-auto max-w-2xl">
             {/* Slash command popover — positioned above the composer */}
             <SlashCommandPopover
               ref={slashRef}
