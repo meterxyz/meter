@@ -131,6 +131,7 @@ const STATEMENTS: string[] = [
   `alter table settlement_history add column if not exists workspace_id text`,
   `alter table oauth_tokens add column if not exists workspace_id text not null default ''`,
   `alter table oauth_tokens add column if not exists metadata jsonb`,
+  `create unique index if not exists idx_oauth_tokens_unique on oauth_tokens(user_id, provider, workspace_id)`,
 
   // Indexes
   `create index if not exists idx_oauth_tokens_user on oauth_tokens(user_id)`,

@@ -206,7 +206,7 @@ export async function storeToken(
     ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
     : null;
 
-  await supabase.from("oauth_tokens").upsert(
+  const { error } = await supabase.from("oauth_tokens").upsert(
     {
       id,
       user_id: userId,
@@ -221,6 +221,9 @@ export async function storeToken(
     },
     { onConflict: "user_id,provider,workspace_id" }
   );
+  if (error) {
+    throw new Error(`Failed to store token for ${provider}: ${error.message}`);
+  }
 }
 
 export async function storeApiKey(
@@ -233,7 +236,7 @@ export async function storeApiKey(
   const supabase = getSupabaseServer();
   const id = `tok_${crypto.randomBytes(8).toString("hex")}`;
 
-  await supabase.from("oauth_tokens").upsert(
+  const { error } = await supabase.from("oauth_tokens").upsert(
     {
       id,
       user_id: userId,
@@ -248,6 +251,9 @@ export async function storeApiKey(
     },
     { onConflict: "user_id,provider,workspace_id" }
   );
+  if (error) {
+    throw new Error(`Failed to store API key for ${provider}: ${error.message}`);
+  }
 }
 
 export async function getTokenRecord(
@@ -380,12 +386,15 @@ export async function getConnectionStatus(
   workspaceId: string
 ): Promise<Record<string, boolean>> {
   const supabase = getSupabaseServer();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("oauth_tokens")
     .select("provider")
     .eq("user_id", userId)
     .eq("workspace_id", workspaceId);
 
+  if (error) {
+    console.error("getConnectionStatus error:", error.message);
+  }
   const status: Record<string, boolean> = {};
   for (const row of data ?? []) {
     status[row.provider] = true;
