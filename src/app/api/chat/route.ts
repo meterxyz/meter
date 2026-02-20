@@ -25,12 +25,19 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, model, projectId, connectedServices } = await req.json();
 
-    // Server-side spend limit enforcement
+    // Server-side spend limit + exposure cap enforcement
     if (projectId) {
       const limitCheck = await checkSpendLimits(userId, projectId);
       if (limitCheck) {
         return new Response(
           JSON.stringify({ error: limitCheck }),
+          { status: 429, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const capCheck = await checkExposureCap(userId, projectId);
+      if (capCheck) {
+        return new Response(
+          JSON.stringify({ error: capCheck }),
           { status: 429, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -186,6 +193,50 @@ async function checkSpendLimits(userId: string, projectId: string): Promise<stri
       }
     }
 
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function checkExposureCap(userId: string, projectId: string): Promise<string | null> {
+  try {
+    const supabase = getSupabaseServer();
+    const scopedId = projectId.startsWith(`${userId}:`) ? projectId : `${userId}:${projectId}`;
+
+    // Only enforce caps after a failed settlement
+    const { data: session } = await supabase
+      .from("chat_sessions")
+      .select("settlement_failed")
+      .eq("id", scopedId)
+      .eq("user_id", userId)
+      .single();
+
+    if (!session?.settlement_failed) return null;
+
+    // Count successful settlements to determine trust tier
+    const { count } = await supabase
+      .from("settlement_history")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "succeeded");
+
+    const successes = count ?? 0;
+    const cap = successes === 0 ? 20 : successes <= 2 ? 100 : 250;
+
+    // Calculate outstanding from unsettled messages
+    const { data: unsettled } = await supabase
+      .from("chat_messages")
+      .select("cost")
+      .eq("session_id", scopedId)
+      .eq("settled", false)
+      .not("cost", "is", null);
+
+    const outstanding = (unsettled ?? []).reduce((sum, m) => sum + (Number(m.cost) || 0), 0);
+
+    if (outstanding >= cap) {
+      return `Outstanding balance ($${outstanding.toFixed(2)}) exceeds limit ($${cap}). Please update your payment method to continue.`;
+    }
     return null;
   } catch {
     return null;

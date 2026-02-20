@@ -626,24 +626,30 @@ function PaymentsTab({ activeProject }: { activeProject: ProjectLike | null }) {
           </span>
         </div>
 
-        {settlementError && (
-          <div className="mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
-            <span className="font-mono text-[11px] text-red-400">{settlementError}</span>
-            <p className="mt-0.5 font-mono text-[10px] text-red-400/60">Please update your card or try again.</p>
-          </div>
-        )}
+        {settlementError ? (
+          <>
+            <div className="mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
+              <span className="font-mono text-[11px] text-red-400">{settlementError}</span>
+              <p className="mt-0.5 font-mono text-[10px] text-red-400/60">Please update your card or try again.</p>
+            </div>
 
-        <button
-          onClick={handleSettle}
-          disabled={isSettling || pendingBalance <= 0}
-          className={`w-full rounded-lg py-2.5 font-mono text-[12px] transition-colors ${
-            settleSuccess
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : "bg-foreground text-background hover:bg-foreground/90 disabled:opacity-40"
-          }`}
-        >
-          {settleSuccess ? "Settled" : isSettling ? "Processing..." : `Pay & Settle $${pendingBalance.toFixed(2)}`}
-        </button>
+            <button
+              onClick={handleSettle}
+              disabled={isSettling || pendingBalance <= 0}
+              className={`w-full rounded-lg py-2.5 font-mono text-[12px] transition-colors ${
+                settleSuccess
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                  : "bg-foreground text-background hover:bg-foreground/90 disabled:opacity-40"
+              }`}
+            >
+              {settleSuccess ? "Settled" : isSettling ? "Processing..." : `Pay & Settle $${pendingBalance.toFixed(2)}`}
+            </button>
+          </>
+        ) : (
+          <p className="font-mono text-[10px] text-muted-foreground/50 text-center py-1">
+            Settles automatically at midnight
+          </p>
+        )}
 
         {cardLast4 && pendingBalance > 0 && (
           <p className="mt-1.5 text-center font-mono text-[10px] text-muted-foreground/40">

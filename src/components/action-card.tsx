@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { ActionCard as ActionCardType, useMeterStore } from "@/lib/store";
+import { ActionCard as ActionCardType } from "@/lib/store";
 
 const TYPE_LABELS: Record<string, string> = {
   domain: "Domain",
@@ -18,22 +17,7 @@ export function ActionCard({
   onApprove: () => void;
   onReject: () => void;
 }) {
-  const autoSettleThreshold = useMeterStore((s) => s.autoSettleThreshold);
-  const settleAll = useMeterStore((s) => s.settleAll);
-  const [paying, setPaying] = useState(false);
-
   const isResolved = card.status !== "pending";
-  const requiresImmediatePayment = (card.cost ?? 0) >= autoSettleThreshold;
-
-  const handlePayNow = async () => {
-    setPaying(true);
-    onApprove();
-    try {
-      await settleAll();
-    } finally {
-      setPaying(false);
-    }
-  };
 
   return (
     <div className="my-3 rounded-lg border border-border p-3">
@@ -61,34 +45,18 @@ export function ActionCard({
             <div className="font-mono text-sm text-foreground">
               ${card.cost.toFixed(2)}
             </div>
-            {card.status === "approved" && !requiresImmediatePayment && (
-              <div className="font-mono text-[9px] text-yellow-500/70">pending</div>
-            )}
-            {card.status === "approved" && requiresImmediatePayment && (
-              <div className="font-mono text-[9px] text-emerald-500/70">settled</div>
-            )}
           </div>
         )}
       </div>
 
       {!isResolved && (
         <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
-          {requiresImmediatePayment ? (
-            <button
-              onClick={handlePayNow}
-              disabled={paying}
-              className="flex-1 rounded-md bg-foreground px-3 py-1.5 font-mono text-[11px] text-background transition-colors hover:bg-foreground/90 disabled:opacity-50"
-            >
-              {paying ? "Processing..." : `Pay $${(card.cost ?? 0).toFixed(2)} Now`}
-            </button>
-          ) : (
-            <button
-              onClick={onApprove}
-              className="flex-1 rounded-md border border-foreground/20 px-3 py-1.5 font-mono text-[11px] text-foreground transition-colors hover:bg-foreground/10"
-            >
-              Approve
-            </button>
-          )}
+          <button
+            onClick={onApprove}
+            className="flex-1 rounded-md border border-foreground/20 px-3 py-1.5 font-mono text-[11px] text-foreground transition-colors hover:bg-foreground/10"
+          >
+            Approve
+          </button>
           <button
             onClick={onReject}
             className="rounded-md px-3 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground"

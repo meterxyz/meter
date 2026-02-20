@@ -108,6 +108,7 @@ interface MeterState {
     paidAt?: number;
   }[];
   autoSettleThreshold: number;
+  lastAutoSettleDate: string | null;
   isSettling: boolean;
 
   pendingInput: string | null;
@@ -175,6 +176,7 @@ interface MeterState {
   updateSpendLimits: (limits: Partial<SpendLimits>, workspaceId?: string) => Promise<void>;
 
   resetDailyIfNeeded: () => void;
+  attemptDailySettlement: () => Promise<void>;
 
   reset: () => void;
 }
@@ -273,7 +275,8 @@ export const useMeterStore = create<MeterState>()(
       activeProjectId: "meter",
 
       pendingCharges: [],
-      autoSettleThreshold: 10,
+      autoSettleThreshold: 25,
+      lastAutoSettleDate: null,
       isSettling: false,
 
       cards: [],
@@ -523,8 +526,6 @@ export const useMeterStore = create<MeterState>()(
         }),
 
       finalizeResponse: (tokensIn, tokensOut, confidence, actualModel) => {
-        const balanceBefore = get().getPendingBalance();
-
         set((s) => {
           const active = ensureDaily(getActiveProject(s));
           const pricingModelId = actualModel
@@ -579,12 +580,6 @@ export const useMeterStore = create<MeterState>()(
 
           return { projects: replaceActiveProject(s, updated) };
         });
-
-        const afterState = get();
-        const threshold = afterState.autoSettleThreshold;
-        if (balanceBefore < threshold && afterState.getPendingBalance() >= threshold) {
-          afterState.settleAll();
-        }
       },
 
       markSettled: (messageId) =>
@@ -737,8 +732,6 @@ export const useMeterStore = create<MeterState>()(
       },
 
       approveCard: (messageId, cardId) => {
-        const balanceBefore = get().getPendingBalance();
-
         set((s) => {
           const active = getActiveProject(s);
           if (!active) return s;
@@ -759,12 +752,6 @@ export const useMeterStore = create<MeterState>()(
               : s.pendingCharges;
           return { projects: replaceActiveProject(s, updated), pendingCharges: newCharge };
         });
-
-        const afterState = get();
-        const threshold = afterState.autoSettleThreshold;
-        if (balanceBefore < threshold && afterState.getPendingBalance() >= threshold) {
-          afterState.settleAll();
-        }
       },
 
       rejectCard: (messageId, cardId) =>
@@ -910,6 +897,18 @@ export const useMeterStore = create<MeterState>()(
           return changed ? { projects } : {};
         }),
 
+      attemptDailySettlement: async () => {
+        const today = todayStr();
+        const state = get();
+        if (state.lastAutoSettleDate === today) return;
+        set({ lastAutoSettleDate: today });
+
+        const balance = state.getPendingBalance();
+        if (balance >= state.autoSettleThreshold) {
+          await state.settleAll();
+        }
+      },
+
       setPendingInput: (v) => set({ pendingInput: v }),
 
       toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
@@ -950,6 +949,7 @@ export const useMeterStore = create<MeterState>()(
         spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,
         autoSettleThreshold: s.autoSettleThreshold,
+        lastAutoSettleDate: s.lastAutoSettleDate,
         projects: s.projects,
         activeProjectId: s.activeProjectId,
       }),
