@@ -218,27 +218,6 @@ export const CONNECTORS: ConnectorDef[] = [
           },
         },
       },
-      {
-        type: "function",
-        function: {
-          name: "stripe_create_payout",
-          description:
-            "Initiate a payout from the Stripe account balance to the connected bank account. If no amount is specified, pays out the full available balance.",
-          parameters: {
-            type: "object",
-            properties: {
-              amount: {
-                type: "number",
-                description: "Amount to pay out in dollars (e.g. 100.50). Omit to pay out full available balance.",
-              },
-              currency: {
-                type: "string",
-                description: "Currency code (default: usd)",
-              },
-            },
-          },
-        },
-      },
     ],
   },
   {

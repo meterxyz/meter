@@ -1,35 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { getValidAccessToken } from "@/lib/oauth";
+import { stripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, workspaceId, amount, currency } = await req.json();
+    const { amount, currency } = await req.json();
 
-    if (!userId || !workspaceId) {
-      return NextResponse.json(
-        { error: "userId and workspaceId required" },
-        { status: 400 }
-      );
-    }
-
-    // Get the user's connected Stripe access token
-    const tokenRecord = await getValidAccessToken(userId, "stripe", workspaceId);
-    if (!tokenRecord) {
-      return NextResponse.json(
-        { error: "Stripe not connected. Connect your Stripe account first." },
-        { status: 400 }
-      );
-    }
-
-    const stripe = new Stripe(tokenRecord.accessToken, {
-      apiVersion: "2026-01-28.clover",
-      typescript: true,
-    });
-
-    // If no amount specified, check balance and pay out the full available balance
-    const balance = await stripe.balance.retrieve();
     const cur = currency ?? "usd";
+
+    // Check our platform Stripe balance
+    const balance = await stripe.balance.retrieve();
     const available = balance.available.find((b) => b.currency === cur);
 
     if (!available || available.amount <= 0) {
@@ -60,7 +39,7 @@ export async function POST(req: NextRequest) {
     const payout = await stripe.payouts.create({
       amount: payoutAmountCents,
       currency: cur,
-      description: "Meter-initiated payout",
+      description: "Meter platform payout",
     });
 
     return NextResponse.json({
@@ -82,32 +61,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get("userId");
-  const workspaceId = req.nextUrl.searchParams.get("workspaceId");
-
-  if (!userId || !workspaceId) {
-    return NextResponse.json(
-      { error: "userId and workspaceId required" },
-      { status: 400 }
-    );
-  }
-
+export async function GET() {
   try {
-    const tokenRecord = await getValidAccessToken(userId, "stripe", workspaceId);
-    if (!tokenRecord) {
-      return NextResponse.json(
-        { error: "Stripe not connected. Connect your Stripe account first." },
-        { status: 400 }
-      );
-    }
-
-    const stripe = new Stripe(tokenRecord.accessToken, {
-      apiVersion: "2026-01-28.clover",
-      typescript: true,
-    });
-
-    // Return current balance and recent payouts
     const [balance, payouts] = await Promise.all([
       stripe.balance.retrieve(),
       stripe.payouts.list({ limit: 10 }),

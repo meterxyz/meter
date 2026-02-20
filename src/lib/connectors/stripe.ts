@@ -46,52 +46,6 @@ export async function getBalance(accessToken: string) {
   };
 }
 
-export async function createPayout(
-  accessToken: string,
-  params: { amount?: number; currency?: string }
-) {
-  const stripe = getStripeClient(accessToken);
-  const cur = params.currency ?? "usd";
-
-  const balance = await stripe.balance.retrieve();
-  const available = balance.available.find((b) => b.currency === cur);
-
-  if (!available || available.amount <= 0) {
-    return {
-      error: `No available balance to pay out (${cur.toUpperCase()})`,
-      available: balance.available.map((b) => ({
-        amount: b.amount / 100,
-        currency: b.currency,
-      })),
-    };
-  }
-
-  const payoutAmountCents = params.amount
-    ? Math.min(Math.round(params.amount * 100), available.amount)
-    : available.amount;
-
-  if (payoutAmountCents <= 0) {
-    return { error: "Payout amount must be greater than zero" };
-  }
-
-  const payout = await stripe.payouts.create({
-    amount: payoutAmountCents,
-    currency: cur,
-    description: "Meter-initiated payout",
-  });
-
-  return {
-    payout: {
-      id: payout.id,
-      amount: payout.amount / 100,
-      currency: payout.currency,
-      status: payout.status,
-      arrival_date: payout.arrival_date,
-      description: payout.description,
-    },
-  };
-}
-
 export async function listSubscriptions(
   accessToken: string,
   params: { status?: string }
