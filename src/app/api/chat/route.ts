@@ -159,23 +159,13 @@ function estimateTokens(text: string): number {
 async function checkSpendLimits(userId: string, projectId: string): Promise<string | null> {
   try {
     const supabase = getSupabaseServer();
-    // Try scoped ID first, fall back to unscoped for backward compat
     const scopedId = projectId.startsWith(`${userId}:`) ? projectId : `${userId}:${projectId}`;
-    let { data: session } = await supabase
+    const { data: session } = await supabase
       .from("chat_sessions")
       .select("daily_limit, monthly_limit, today_cost, total_cost")
       .eq("id", scopedId)
       .eq("user_id", userId)
       .single();
-    if (!session && scopedId !== projectId) {
-      const fallback = await supabase
-        .from("chat_sessions")
-        .select("daily_limit, monthly_limit, today_cost, total_cost")
-        .eq("id", projectId)
-        .eq("user_id", userId)
-        .single();
-      session = fallback.data;
-    }
 
     if (!session) return null;
     const dailyLimit = session.daily_limit != null ? Number(session.daily_limit) : null;

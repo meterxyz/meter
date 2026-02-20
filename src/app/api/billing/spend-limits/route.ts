@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 
-// Resolve scoped session ID (try scoped first, fall back to unscoped)
+// Resolve scoped session ID
 async function resolveSessionId(
   supabase: ReturnType<typeof getSupabaseServer>,
   userId: string,
@@ -15,17 +15,7 @@ async function resolveSessionId(
     .eq("id", scopedId)
     .eq("user_id", userId)
     .single();
-  if (data) return data.id;
-  if (scopedId !== localId) {
-    const fallback = await supabase
-      .from("chat_sessions")
-      .select("id")
-      .eq("id", localId)
-      .eq("user_id", userId)
-      .single();
-    if (fallback.data) return fallback.data.id;
-  }
-  return null;
+  return data?.id ?? null;
 }
 
 export async function GET(req: NextRequest) {
