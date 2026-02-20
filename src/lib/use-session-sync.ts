@@ -61,7 +61,10 @@ export function useSessionSync() {
     timestamp: m.timestamp as number,
   });
 
-  const buildProjectFromSession = (session: ServerSession) => {
+  const buildProjectFromSession = (
+    session: ServerSession,
+    existingConnectedServices?: Record<string, boolean>,
+  ) => {
     const messages = Array.isArray(session.messages)
       ? session.messages.map((m: Record<string, unknown>) => mapServerMessage(m))
       : [];
@@ -84,7 +87,7 @@ export function useSessionSync() {
       todayByModel: {},
       todayDate: session.today_date ?? todayStr(),
       totalCost: Math.max(totalFromSession, totalFromMessages),
-      connectedServices: {},
+      connectedServices: existingConnectedServices ?? {},
     };
   };
 
@@ -227,9 +230,12 @@ export function useSessionSync() {
         const store = useMeterStore.getState();
         const serverSessions = data.sessions as ServerSession[];
 
+        const localById = new Map(store.projects.map((p) => [p.id, p]));
         const hasLocalMessages = store.projects.some((p) => p.messages.length > 0);
         if (!hasLocalMessages) {
-          const serverProjects = serverSessions.map((s) => buildProjectFromSession(s));
+          const serverProjects = serverSessions.map((s) =>
+            buildProjectFromSession(s, localById.get(s.id)?.connectedServices)
+          );
           if (serverProjects.length > 0) {
             useMeterStore.setState((s) => ({
               projects: serverProjects,
@@ -247,10 +253,10 @@ export function useSessionSync() {
           } else {
             useWorkspaceStore.getState().upsertCompaniesFromSessions(serverSessions, store.activeProjectId);
           }
+          useMeterStore.getState().fetchConnectionStatus();
           return;
         }
 
-        const localById = new Map(store.projects.map((p) => [p.id, p]));
         const merged = [...store.projects];
         let changed = false;
 
@@ -266,7 +272,7 @@ export function useSessionSync() {
           if (localProject.messages.length === 0 && Array.isArray(serverSession.messages) && serverSession.messages.length > 0) {
             const idx = merged.findIndex((p) => p.id === serverId);
             if (idx >= 0) {
-              merged[idx] = buildProjectFromSession(serverSession);
+              merged[idx] = buildProjectFromSession(serverSession, localProject.connectedServices);
               changed = true;
             }
           }
@@ -285,6 +291,7 @@ export function useSessionSync() {
         }
 
         useWorkspaceStore.getState().upsertCompaniesFromSessions(serverSessions, nextActiveProjectId);
+        useMeterStore.getState().fetchConnectionStatus();
       } catch {
         // Silent fail — localStorage still works as fallback
       }
