@@ -162,6 +162,7 @@ export function Inspector() {
 
 /* ─── SHARED TYPES ─── */
 interface ProjectLike {
+  id: string;
   messages: ChatMessage[];
   todayCost: number;
   todayTokensIn: number;
