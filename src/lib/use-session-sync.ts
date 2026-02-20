@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useMeterStore, type ReceiptStatus, type ActionCard } from "@/lib/store";
 import { useWorkspaceStore } from "@/lib/workspace-store";
+import { useDecisionsStore } from "@/lib/decisions-store";
 
 const SYNC_INTERVAL = 10_000; // sync every 10 seconds
 const SYNC_DEBOUNCE = 2_000; // debounce after message
@@ -295,6 +296,9 @@ export function useSessionSync() {
     }
 
     loadSessions();
+
+    // Also load decisions from server (they may not be in localStorage after logout/login)
+    useDecisionsStore.getState().fetchDecisions();
 
     return () => {
       cancelled = true;
