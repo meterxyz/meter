@@ -33,11 +33,11 @@ export function ApiKeyDialog({ provider, onClose }: ApiKeyDialogProps) {
     setError(null);
     try {
       const metadata = needsProjectUrl ? { projectUrl: projectUrl.trim() } : undefined;
-      const success = await submitApiKey(provider, apiKey.trim(), metadata);
-      if (success) {
+      const result = await submitApiKey(provider, apiKey.trim(), metadata);
+      if (result.ok) {
         onClose();
       } else {
-        setError("Failed to save API key");
+        setError(result.error ?? "Failed to save API key");
       }
     } catch {
       setError("Something went wrong");
