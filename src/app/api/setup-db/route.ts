@@ -129,6 +129,7 @@ const STATEMENTS: string[] = [
   `alter table chat_sessions add column if not exists monthly_limit numeric`,
   `alter table chat_sessions add column if not exists per_txn_limit numeric`,
   `alter table settlement_history add column if not exists workspace_id text`,
+  `alter table oauth_tokens add column if not exists workspace_id text not null default ''`,
   `alter table oauth_tokens add column if not exists metadata jsonb`,
 
   // Indexes
