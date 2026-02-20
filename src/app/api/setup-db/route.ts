@@ -143,6 +143,13 @@ create table if not exists oauth_state (
   created_at timestamptz default now()
 );
 
+-- Alter statements for existing deployments (must run before indexes)
+alter table chat_sessions add column if not exists daily_limit numeric;
+alter table chat_sessions add column if not exists monthly_limit numeric;
+alter table chat_sessions add column if not exists per_txn_limit numeric;
+alter table settlement_history add column if not exists workspace_id text;
+alter table oauth_tokens add column if not exists metadata jsonb;
+
 -- Indexes
 create index if not exists idx_oauth_tokens_user on oauth_tokens(user_id);
 create index if not exists idx_oauth_tokens_workspace on oauth_tokens(workspace_id);
@@ -156,13 +163,6 @@ create index if not exists idx_workspaces_user on workspaces(user_id);
 create index if not exists idx_decisions_user on decisions(user_id);
 create index if not exists idx_settlement_history_user on settlement_history(user_id);
 create index if not exists idx_settlement_history_workspace on settlement_history(workspace_id);
-
--- Alter statements for existing deployments
-alter table chat_sessions add column if not exists daily_limit numeric;
-alter table chat_sessions add column if not exists monthly_limit numeric;
-alter table chat_sessions add column if not exists per_txn_limit numeric;
-alter table settlement_history add column if not exists workspace_id text;
-alter table oauth_tokens add column if not exists metadata jsonb;
 `;
 
 // Extract project ref from Supabase URL (e.g. "yzjevhsacvqbcygbmewk" from "https://yzjevhsacvqbcygbmewk.supabase.co")
