@@ -240,6 +240,7 @@ export function ChatView() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
   const slashRef = useRef<SlashCommandHandle>(null);
   const isNearBottomRef = useRef(true);
@@ -533,6 +534,8 @@ export function ChatView() {
     if (val.startsWith("/")) {
       setSlashOpen(true);
       setSlashQuery(val.slice(1));
+      // Close command bar when slash popover opens
+      if (commandBarOpen) setCommandBarOpen(false);
     } else {
       if (slashOpen) { setSlashOpen(false); setSlashQuery(""); }
     }
@@ -760,7 +763,7 @@ export function ChatView() {
             {/* Unified box */}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               {/* Command bar — top section (connections + commands) */}
-              <CommandBar onSelectCommand={handleCommandSelect} />
+              <CommandBar open={commandBarOpen} onToggle={setCommandBarOpen} onSelectCommand={handleCommandSelect} />
 
               {/* Model picker + composer area */}
               <div ref={modelPickerRef}>
