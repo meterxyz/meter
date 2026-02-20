@@ -56,7 +56,7 @@ export function CommandBar({ open, onToggle, onSelectCommand }: CommandBarProps)
     if (isApiKeyProvider(providerId)) {
       setApiKeyProvider(providerId);
     } else {
-      initiateOAuthFlow(providerId, userId, activeProjectId);
+      initiateOAuthFlow(providerId, activeProjectId);
     }
   }
 

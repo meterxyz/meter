@@ -9,7 +9,7 @@ export function GmailScreen() {
 
   const handleConnect = () => {
     if (userId) {
-      initiateOAuthFlow("gmail", userId, activeProjectId);
+      initiateOAuthFlow("gmail", activeProjectId);
     }
   };
 

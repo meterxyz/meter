@@ -5,6 +5,7 @@ import {
   generateState,
   buildAuthorizeUrl,
 } from "@/lib/oauth";
+import { requireAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,13 +14,16 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ provider: string }> }
 ) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
     const { provider: providerId } = await params;
-    const userId = req.nextUrl.searchParams.get("userId");
     const workspaceId = req.nextUrl.searchParams.get("workspaceId");
 
-    if (!userId || !workspaceId) {
-      return NextResponse.json({ error: "Missing userId or workspaceId" }, { status: 400 });
+    if (!workspaceId) {
+      return NextResponse.json({ error: "Missing workspaceId" }, { status: 400 });
     }
 
     const provider = OAUTH_PROVIDERS[providerId];

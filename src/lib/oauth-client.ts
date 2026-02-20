@@ -7,6 +7,6 @@ export function isApiKeyProvider(providerId: string): boolean {
   return connector?.connectionType === "api_key";
 }
 
-export function initiateOAuthFlow(providerId: string, userId: string, workspaceId: string) {
-  window.location.href = `/api/oauth/${providerId}/authorize?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(workspaceId)}`;
+export function initiateOAuthFlow(providerId: string, workspaceId: string) {
+  window.location.href = `/api/oauth/${providerId}/authorize?workspaceId=${encodeURIComponent(workspaceId)}`;
 }

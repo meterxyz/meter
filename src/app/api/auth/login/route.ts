@@ -5,6 +5,7 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import crypto from "crypto";
+import { createSession, setSessionCookie } from "@/lib/session";
 
 const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "meter.chat";
 const BASE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
@@ -133,7 +134,9 @@ export async function POST(req: NextRequest) {
         .eq("id", uid)
         .single();
 
-      return NextResponse.json({
+      // Create server-side session and set cookie
+      const sessionToken = await createSession(uid);
+      const response = NextResponse.json({
         verified: true,
         user: {
           id: user?.id,
@@ -143,6 +146,8 @@ export async function POST(req: NextRequest) {
           gmailConnected: user?.gmail_connected ?? false,
         },
       });
+      setSessionCookie(response, sessionToken);
+      return response;
     }
 
     return NextResponse.json({ error: "Invalid step" }, { status: 400 });

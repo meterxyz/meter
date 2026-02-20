@@ -45,7 +45,7 @@ export function ConnectorsBar() {
     if (isApiKeyProvider(providerId)) {
       setApiKeyProvider(providerId);
     } else {
-      initiateOAuthFlow(providerId, userId, activeProjectId);
+      initiateOAuthFlow(providerId, activeProjectId);
     }
   }
 

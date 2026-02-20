@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const userId = req.nextUrl.searchParams.get("userId");
-    if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 });
-    }
-
     const supabase = getSupabaseServer();
     const { data, error } = await supabase
       .from("passkey_credentials")

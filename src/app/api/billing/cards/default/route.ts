@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const { userId, paymentMethodId } = await req.json();
-    if (!userId || !paymentMethodId) {
-      return NextResponse.json({ error: "userId and paymentMethodId required" }, { status: 400 });
+    const { paymentMethodId } = await req.json();
+    if (!paymentMethodId) {
+      return NextResponse.json({ error: "paymentMethodId required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();

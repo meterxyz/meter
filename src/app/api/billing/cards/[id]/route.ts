@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
     const { id: paymentMethodId } = await params;
-    const userId = req.nextUrl.searchParams.get("userId");
-    if (!userId || !paymentMethodId) {
-      return NextResponse.json({ error: "userId and card id required" }, { status: 400 });
+    if (!paymentMethodId) {
+      return NextResponse.json({ error: "card id required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();

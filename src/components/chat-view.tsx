@@ -449,7 +449,6 @@ export function ChatView() {
         body: JSON.stringify({
           messages: allMessages,
           model: selectedModelId,
-          userId: userId || undefined,
           projectId: activeProjectId,
           connectedServices: Object.keys(connectedServices).filter(
             (k) => connectedServices[k]
@@ -595,7 +594,7 @@ export function ChatView() {
     if (isApiKeyProvider(providerId)) {
       setApiKeyProvider(providerId);
     } else {
-      initiateOAuthFlow(providerId, userId, activeProjectId);
+      initiateOAuthFlow(providerId, activeProjectId);
     }
     setSlashOpen(false);
     setSlashQuery("");

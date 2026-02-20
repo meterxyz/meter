@@ -48,7 +48,6 @@ function CardForm() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId,
             setupIntentId: setupIntent.id,
           }),
         });
@@ -144,7 +143,7 @@ export function AuthorizeScreen() {
     fetch("/api/billing/setup-intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({}),
     })
       .then((res) => res.json())
       .then((data) => {

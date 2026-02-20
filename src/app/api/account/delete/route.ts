@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
+import { deleteAllUserSessions } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const { userId } = await req.json();
-    if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 });
-    }
 
     const supabase = getSupabaseServer();
 
@@ -74,6 +76,9 @@ export async function POST(req: NextRequest) {
     );
     await supabase.from("workspaces").delete().eq("user_id", userId);
     await supabase.from("settlement_history").delete().eq("user_id", userId);
+
+    // Delete all auth sessions
+    await deleteAllUserSessions(userId);
 
     // Delete user (cascades passkey_credentials, oauth_tokens)
     await supabase.from("meter_users").delete().eq("id", userId);

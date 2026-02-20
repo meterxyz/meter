@@ -92,7 +92,7 @@ export function useSessionSync() {
   };
 
   const syncToServer = useCallback(async () => {
-    if (!userId || !authenticated) return;
+    if (!authenticated) return;
 
     // Create a snapshot hash to avoid unnecessary syncs
     const snapshot = JSON.stringify(
@@ -115,7 +115,6 @@ export function useSessionSync() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId,
             session: {
               id: project.id,
               name: project.name,
@@ -141,7 +140,7 @@ export function useSessionSync() {
     if (allOk) {
       lastSyncRef.current = snapshot;
     }
-  }, [userId, authenticated, projects]);
+  }, [authenticated, projects]);
 
   // Periodic sync
   useEffect(() => {
@@ -188,11 +187,9 @@ export function useSessionSync() {
     if (!authenticated) return;
 
     const handleBeforeUnload = () => {
-      if (!userId) return;
-      // Use sendBeacon for reliable unload sync
+      // Use sendBeacon for reliable unload sync (cookies sent automatically on same-origin)
       for (const project of projects) {
         const body = JSON.stringify({
-          userId,
           session: {
             id: project.id,
             name: project.name,
@@ -211,17 +208,17 @@ export function useSessionSync() {
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [authenticated, userId, projects]);
+  }, [authenticated, projects]);
 
   // Load sessions from server on mount
   useEffect(() => {
-    if (!userId || !authenticated) return;
+    if (!authenticated) return;
 
     let cancelled = false;
 
     async function loadSessions() {
       try {
-        const res = await fetch(`/api/sessions?userId=${encodeURIComponent(userId!)}`);
+        const res = await fetch("/api/sessions");
         if (!res.ok) return;
         const data = await res.json();
 
@@ -302,5 +299,5 @@ export function useSessionSync() {
     return () => {
       cancelled = true;
     };
-  }, [userId, authenticated]);
+  }, [authenticated]);
 }

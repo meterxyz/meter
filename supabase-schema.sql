@@ -213,3 +213,17 @@ create index if not exists idx_workspace_projects_workspace on workspace_project
 create index if not exists idx_decisions_user on decisions(user_id);
 create index if not exists idx_settlement_history_user on settlement_history(user_id);
 create index if not exists idx_settlement_history_workspace on settlement_history(workspace_id);
+
+-- =============================================
+-- AUTH SESSIONS (server-side session tokens)
+-- =============================================
+
+create table if not exists auth_sessions (
+  token text primary key,
+  user_id text not null references meter_users(id) on delete cascade,
+  created_at timestamptz default now(),
+  expires_at timestamptz not null
+);
+
+create index if not exists idx_auth_sessions_user on auth_sessions(user_id);
+create index if not exists idx_auth_sessions_expires on auth_sessions(expires_at);

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const userId = req.nextUrl.searchParams.get("userId");
     const workspaceId = req.nextUrl.searchParams.get("workspaceId");
-    if (!userId || !workspaceId) {
-      return NextResponse.json({ error: "userId and workspaceId required" }, { status: 400 });
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();
@@ -28,11 +32,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const putAuth = await requireAuth();
+  if (putAuth instanceof NextResponse) return putAuth;
+  const { userId: putUserId } = putAuth;
+
   try {
-    const { userId, workspaceId, dailyLimit, monthlyLimit, perTxnLimit } = await req.json();
-    if (!userId || !workspaceId) {
-      return NextResponse.json({ error: "userId and workspaceId required" }, { status: 400 });
+    const { workspaceId, dailyLimit, monthlyLimit, perTxnLimit } = await req.json();
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId required" }, { status: 400 });
     }
+    const userId = putUserId;
 
     const supabase = getSupabaseServer();
     await supabase

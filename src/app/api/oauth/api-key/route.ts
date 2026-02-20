@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { storeApiKey, OAUTH_PROVIDERS } from "@/lib/oauth";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  const { userId, provider, workspaceId, apiKey, metadata } = await req.json();
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
 
-  if (!userId || !provider || !apiKey || !workspaceId) {
+  const { provider, workspaceId, apiKey, metadata } = await req.json();
+
+  if (!provider || !apiKey || !workspaceId) {
     return NextResponse.json(
-      { error: "Missing userId, provider, workspaceId, or apiKey" },
+      { error: "Missing provider, workspaceId, or apiKey" },
       { status: 400 }
     );
   }
