@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 
+// Resolve scoped session ID (try scoped first, fall back to unscoped)
+async function resolveSessionId(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  userId: string,
+  localId: string
+): Promise<string | null> {
+  const scopedId = localId.startsWith(`${userId}:`) ? localId : `${userId}:${localId}`;
+  const { data } = await supabase
+    .from("chat_sessions")
+    .select("id")
+    .eq("id", scopedId)
+    .eq("user_id", userId)
+    .single();
+  if (data) return data.id;
+  if (scopedId !== localId) {
+    const fallback = await supabase
+      .from("chat_sessions")
+      .select("id")
+      .eq("id", localId)
+      .eq("user_id", userId)
+      .single();
+    if (fallback.data) return fallback.data.id;
+  }
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
@@ -14,10 +40,15 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = getSupabaseServer();
+    const dbId = await resolveSessionId(supabase, userId, workspaceId);
+    if (!dbId) {
+      return NextResponse.json({ dailyLimit: null, monthlyLimit: null, perTxnLimit: null });
+    }
+
     const { data } = await supabase
       .from("chat_sessions")
       .select("daily_limit, monthly_limit, per_txn_limit")
-      .eq("id", workspaceId)
+      .eq("id", dbId)
       .eq("user_id", userId)
       .single();
 
@@ -32,18 +63,22 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const putAuth = await requireAuth();
-  if (putAuth instanceof NextResponse) return putAuth;
-  const { userId: putUserId } = putAuth;
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
 
   try {
     const { workspaceId, dailyLimit, monthlyLimit, perTxnLimit } = await req.json();
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId required" }, { status: 400 });
     }
-    const userId = putUserId;
 
     const supabase = getSupabaseServer();
+    const dbId = await resolveSessionId(supabase, userId, workspaceId);
+    if (!dbId) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
     await supabase
       .from("chat_sessions")
       .update({
@@ -52,7 +87,7 @@ export async function PUT(req: NextRequest) {
         per_txn_limit: perTxnLimit ?? null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", workspaceId)
+      .eq("id", dbId)
       .eq("user_id", userId);
 
     return NextResponse.json({ success: true });
