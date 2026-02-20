@@ -86,7 +86,7 @@ export function ApiKeyDialog({ provider, onClose }: ApiKeyDialogProps) {
               </div>
               <div className="space-y-1.5">
                 <label className="font-mono text-[11px] text-muted-foreground/80">
-                  Anon key <span className="text-muted-foreground/50">(publishable)</span>
+                  Service role key <span className="text-muted-foreground/50">(secret)</span>
                 </label>
                 <Input
                   type="password"
@@ -97,7 +97,7 @@ export function ApiKeyDialog({ provider, onClose }: ApiKeyDialogProps) {
                   className="font-mono text-sm"
                 />
                 <p className="font-mono text-[10px] text-muted-foreground/50">
-                  Settings → API → anon public key
+                  Settings → API → service_role secret
                 </p>
               </div>
             </>
