@@ -5,7 +5,7 @@ import { useMeterStore } from "@/lib/store";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
-  PaymentElement,
+  CardElement,
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
@@ -14,7 +14,7 @@ const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 );
 
-function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
+function AddCardForm({ clientSecret, onSuccess }: { clientSecret: string; onSuccess: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const userId = useMeterStore((s) => s.userId);
@@ -27,29 +27,27 @@ function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
 
   const handleSubmit = async () => {
     if (!stripe || !elements || !userId) return;
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) return;
 
     setLoading(true);
     setError(null);
     setStatus("Saving card...");
 
     try {
-      const { error: submitError } = await elements.submit();
-      if (submitError) throw new Error(submitError.message);
-
-      const { error: confirmError, setupIntent } = await stripe.confirmSetup({
-        elements,
-        redirect: "if_required",
+      const result = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: { card: cardElement },
       });
 
-      if (confirmError) throw new Error(confirmError.message);
+      if (result.error) throw new Error(result.error.message);
 
-      if (setupIntent?.status === "succeeded") {
+      if (result.setupIntent?.status === "succeeded") {
         setStatus("Confirming...");
         const res = await fetch("/api/billing/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            setupIntentId: setupIntent.id,
+            setupIntentId: result.setupIntent.id,
           }),
         });
         const data = await res.json();
@@ -72,9 +70,17 @@ function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-border bg-card/50 p-4">
-        <PaymentElement
+        <CardElement
           options={{
-            layout: "tabs",
+            style: {
+              base: {
+                color: "#ffffff",
+                fontFamily: "ui-monospace, monospace",
+                fontSize: "14px",
+                "::placeholder": { color: "#666666" },
+              },
+              invalid: { color: "#ef4444" },
+            },
           }}
         />
       </div>
@@ -185,22 +191,18 @@ export function AddCardModal({ open, onClose }: { open: boolean; onClose: () => 
             <Elements
               stripe={stripePromise}
               options={{
-                clientSecret,
                 appearance: {
                   theme: "night",
                   variables: {
                     colorPrimary: "#ffffff",
                     colorBackground: "#0a0a0a",
                     colorText: "#ffffff",
-                    colorTextPlaceholder: "#666666",
                     fontFamily: "ui-monospace, monospace",
-                    fontSizeBase: "14px",
-                    borderRadius: "8px",
                   },
                 },
               }}
             >
-              <AddCardForm onSuccess={onClose} />
+              <AddCardForm clientSecret={clientSecret} onSuccess={onClose} />
             </Elements>
           )}
         </div>

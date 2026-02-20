@@ -5,7 +5,7 @@ import { useMeterStore } from "@/lib/store";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
-  PaymentElement,
+  CardElement,
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
@@ -14,35 +14,33 @@ const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 );
 
-function CardFormInner() {
+function CardFormInner({ clientSecret }: { clientSecret: string }) {
   const stripe = useStripe();
   const elements = useElements();
-  const { userId, setCardOnFile } = useMeterStore();
+  const setCardOnFile = useMeterStore((s) => s.setCardOnFile);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!stripe || !elements) return;
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const { error: submitError } = await elements.submit();
-      if (submitError) throw new Error(submitError.message);
-
-      const { error: confirmError, setupIntent } = await stripe.confirmSetup({
-        elements,
-        redirect: "if_required",
+      const result = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: { card: cardElement },
       });
 
-      if (confirmError) throw new Error(confirmError.message);
+      if (result.error) throw new Error(result.error.message);
 
-      if (setupIntent?.status === "succeeded") {
+      if (result.setupIntent?.status === "succeeded") {
         const res = await fetch("/api/billing/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ setupIntentId: setupIntent.id }),
+          body: JSON.stringify({ setupIntentId: result.setupIntent.id }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to confirm");
@@ -56,25 +54,34 @@ function CardFormInner() {
 
   return (
     <div className="mt-3 max-w-sm">
-      <div className="rounded-lg border border-border bg-card/50 p-4">
-        <PaymentElement options={{ layout: "tabs" }} />
+      <div className="rounded-lg border border-border bg-card/50 px-3 py-2.5">
+        <CardElement
+          options={{
+            style: {
+              base: {
+                color: "#ffffff",
+                fontFamily: "ui-monospace, monospace",
+                fontSize: "13px",
+                "::placeholder": { color: "#666666" },
+              },
+              invalid: { color: "#ef4444" },
+            },
+          }}
+        />
       </div>
 
-      <div className="mt-2 rounded-lg border border-border/30 px-3 py-2">
-        <p className="font-mono text-[10px] text-muted-foreground/50 leading-relaxed">
-          No charge now. We verify your card and save it for billing.
-          Usage settles automatically once per day at midnight.
-        </p>
-      </div>
+      <p className="mt-2 font-mono text-[10px] text-muted-foreground/50 leading-relaxed">
+        No charge now. Usage settles daily at midnight.
+      </p>
 
       {error && (
-        <p className="mt-2 font-mono text-[10px] text-red-400">{error}</p>
+        <p className="mt-1 font-mono text-[10px] text-red-400">{error}</p>
       )}
 
       <button
         onClick={handleSubmit}
         disabled={loading || !stripe}
-        className="mt-3 w-full rounded-lg bg-foreground py-2.5 font-mono text-xs text-background transition-colors hover:bg-foreground/90 disabled:opacity-50"
+        className="mt-2 w-full rounded-lg bg-foreground py-2.5 font-mono text-xs text-background transition-colors hover:bg-foreground/90 disabled:opacity-50"
       >
         {loading ? "Saving..." : "Add Card & Start"}
       </button>
@@ -83,7 +90,7 @@ function CardFormInner() {
 }
 
 export function InlineCardForm() {
-  const { userId } = useMeterStore();
+  const userId = useMeterStore((s) => s.userId);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,22 +135,18 @@ export function InlineCardForm() {
     <Elements
       stripe={stripePromise}
       options={{
-        clientSecret,
         appearance: {
           theme: "night",
           variables: {
             colorPrimary: "#ffffff",
             colorBackground: "#0a0a0a",
             colorText: "#ffffff",
-            colorTextPlaceholder: "#666666",
             fontFamily: "ui-monospace, monospace",
-            fontSizeBase: "13px",
-            borderRadius: "8px",
           },
         },
       }}
     >
-      <CardFormInner />
+      <CardFormInner clientSecret={clientSecret} />
     </Elements>
   );
 }

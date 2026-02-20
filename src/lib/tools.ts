@@ -141,6 +141,7 @@ export const SYSTEM_PROMPT = buildSystemPrompt([]);
 interface ToolContext {
   userId?: string;
   projectId?: string;
+  workspaceId?: string;
 }
 
 export async function executeTool(
@@ -261,11 +262,12 @@ async function withConnectorToken(
   ctx: ToolContext,
   handler: (accessToken: string, metadata?: Record<string, unknown> | null) => Promise<unknown>
 ): Promise<string> {
-  if (!ctx.userId || !ctx.projectId) {
+  const wsId = ctx.workspaceId ?? ctx.projectId;
+  if (!ctx.userId || !wsId) {
     return "Missing user session. Please sign in and connect the service.";
   }
   try {
-    const token = await getValidAccessToken(ctx.userId, providerId, ctx.projectId);
+    const token = await getValidAccessToken(ctx.userId, providerId, wsId);
     if (!token) {
       return `No ${providerId} connection found. Connect it in Settings.`;
     }

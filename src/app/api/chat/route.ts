@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
                 // malformed args — pass empty
               }
 
-              const toolResult = await executeTool(tc.name, args, { userId, projectId });
+              const toolResult = await executeTool(tc.name, args, { userId, projectId, workspaceId: projectId });
 
               const toolResultEvent: Record<string, unknown> = { type: "tool_result", name: tc.name };
               if (tc.name === "save_decision") {
