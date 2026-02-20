@@ -60,7 +60,7 @@ export async function listSubscriptions(
       id: s.id,
       status: s.status,
       customer: typeof s.customer === "string" ? s.customer : s.customer?.id ?? null,
-      currentPeriodEnd: s.current_period_end,
+      currentPeriodEnd: (s as unknown as Record<string, unknown>).current_period_end ?? null,
       cancelAtPeriodEnd: s.cancel_at_period_end,
       price: s.items.data[0]?.price?.unit_amount ? s.items.data[0].price.unit_amount / 100 : null,
       currency: s.items.data[0]?.price?.currency ?? null,

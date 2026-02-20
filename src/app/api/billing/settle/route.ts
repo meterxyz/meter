@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       card_last4: pmObj && "card" in pmObj ? pmObj.card?.last4 ?? null : null,
       card_brand: pmObj && "card" in pmObj ? pmObj.card?.brand ?? null : null,
       status: "succeeded",
-    }).then(() => {}).catch((e) => console.error("Failed to write settlement history:", e));
+    }).then(() => {}, (e: unknown) => console.error("Failed to write settlement history:", e));
 
     return NextResponse.json({
       success: true,

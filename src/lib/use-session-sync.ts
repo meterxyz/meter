@@ -1,11 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useMeterStore } from "@/lib/store";
+import { useMeterStore, type ReceiptStatus, type ActionCard } from "@/lib/store";
 import { useWorkspaceStore } from "@/lib/workspace-store";
 
 const SYNC_INTERVAL = 10_000; // sync every 10 seconds
 const SYNC_DEBOUNCE = 2_000; // debounce after message
+
+interface ServerSession {
+  id: string;
+  project_name?: string;
+  name?: string;
+  created_at?: string;
+  messages?: Record<string, unknown>[];
+  total_cost?: number;
+  today_cost?: number;
+  today_tokens_in?: number;
+  today_tokens_out?: number;
+  today_message_count?: number;
+  today_date?: string;
+  [key: string]: unknown;
+}
 
 export function useSessionSync() {
   const userId = useMeterStore((s) => s.userId);
@@ -39,14 +54,14 @@ export function useSessionSync() {
     cost: m.cost as number | undefined,
     confidence: m.confidence as number | undefined,
     settled: m.settled as boolean | undefined,
-    receiptStatus: m.receipt_status as string | undefined,
+    receiptStatus: m.receipt_status as ReceiptStatus | undefined,
     signature: m.signature as string | undefined,
     txHash: m.tx_hash as string | undefined,
-    cards: m.cards as unknown,
+    cards: m.cards as ActionCard[] | undefined,
     timestamp: m.timestamp as number,
   });
 
-  const buildProjectFromSession = (session: Record<string, unknown>) => {
+  const buildProjectFromSession = (session: ServerSession) => {
     const messages = Array.isArray(session.messages)
       ? session.messages.map((m: Record<string, unknown>) => mapServerMessage(m))
       : [];
@@ -56,8 +71,8 @@ export function useSessionSync() {
     const totalFromSession = Number(session.total_cost ?? 0);
 
     return {
-      id: session.id as string,
-      name: (session.project_name as string) ?? (session.name as string) ?? (session.id as string),
+      id: session.id,
+      name: session.project_name ?? session.name ?? session.id,
       messages,
       isStreaming: false,
       settlementError: null,
@@ -67,7 +82,7 @@ export function useSessionSync() {
       todayTokensOut: Number(session.today_tokens_out ?? 0),
       todayMessageCount: Number(session.today_message_count ?? 0),
       todayByModel: {},
-      todayDate: (session.today_date as string) ?? todayStr(),
+      todayDate: session.today_date ?? todayStr(),
       totalCost: Math.max(totalFromSession, totalFromMessages),
       connectedServices: {},
     };
@@ -210,7 +225,7 @@ export function useSessionSync() {
         if (cancelled || !data.sessions?.length) return;
 
         const store = useMeterStore.getState();
-        const serverSessions = data.sessions as Record<string, unknown>[];
+        const serverSessions = data.sessions as ServerSession[];
 
         const hasLocalMessages = store.projects.some((p) => p.messages.length > 0);
         if (!hasLocalMessages) {
