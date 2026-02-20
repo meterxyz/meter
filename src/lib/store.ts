@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DEFAULT_MODEL, getModel } from "@/lib/models";
+import { CONNECTORS } from "@/lib/connectors";
 
 export type ReceiptStatus = "signing" | "signed" | "settled";
 
@@ -227,6 +228,21 @@ function shortHex() {
   return Math.random().toString(16).slice(2, 10);
 }
 
+function buildConnectionMessage(providerId: string): ChatMessage | null {
+  const connector = CONNECTORS.find((c) => c.id === providerId);
+  if (!connector) return null;
+  const hints = connector.tools
+    .slice(0, 2)
+    .map((t) => t.function.description.split(".")[0].toLowerCase().trim())
+    .join(" or ");
+  return {
+    id: Math.random().toString(36).slice(2, 10),
+    role: "assistant",
+    content: `**${connector.name} connected!** I can now help you with ${connector.description}. Try asking me to ${hints}.`,
+    timestamp: Date.now(),
+  };
+}
+
 const initialProjects = [
   createProject("meter", "Meter"),
   createProject("keypass", "Keypass"),
@@ -271,12 +287,21 @@ export const useMeterStore = create<MeterState>()(
       setAuth: (userId, email) => set({ userId, email, authenticated: true }),
       setCardOnFile: (v, last4, brand) => set({ cardOnFile: v, cardLast4: last4 ?? null, cardBrand: brand ?? null }),
       setStripeCustomerId: (id) => set({ stripeCustomerId: id }),
-      connectService: (id) =>
+      connectService: (id) => {
         set((s) => {
           const active = getActiveProject(s);
           const updated = { ...active, connectedServices: { ...active.connectedServices, [id]: true } };
           return { projects: replaceActiveProject(s, updated) };
-        }),
+        });
+        const msg = buildConnectionMessage(id);
+        if (msg) {
+          set((s) => {
+            const active = getActiveProject(s);
+            const updated = { ...active, messages: [...active.messages, msg] };
+            return { projects: replaceActiveProject(s, updated) };
+          });
+        }
+      },
       disconnectService: (id) =>
         set((s) => {
           const active = getActiveProject(s);
@@ -342,6 +367,14 @@ export const useMeterStore = create<MeterState>()(
               const updated = { ...active, connectedServices: { ...active.connectedServices, [provider]: true } };
               return { projects: replaceActiveProject(s, updated) };
             });
+            const msg = buildConnectionMessage(provider);
+            if (msg) {
+              set((s) => {
+                const active = getActiveProject(s);
+                const updated = { ...active, messages: [...active.messages, msg] };
+                return { projects: replaceActiveProject(s, updated) };
+              });
+            }
             return true;
           }
           return false;

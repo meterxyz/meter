@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 
 // One-time DB setup endpoint.
-// Tries multiple methods to execute DDL against Supabase:
-//   1. Management API (requires SUPABASE_ACCESS_TOKEN)
-//   2. Service role key via /pg/query
-//   3. Service role key via PostgREST RPC
+// Uses the Supabase Management API (requires SUPABASE_ACCESS_TOKEN).
 // Call once after deploying: GET https://meter.chat/api/setup-db
 
 const SCHEMA_SQL = `
@@ -176,7 +173,6 @@ function getProjectRef(url: string): string | null {
 
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
 
   if (!url) {
@@ -186,113 +182,70 @@ export async function GET() {
     );
   }
 
-  // Method 1: Management API (most reliable, works on all Supabase projects)
+  // Management API (requires SUPABASE_ACCESS_TOKEN)
   if (accessToken) {
     const ref = getProjectRef(url);
-    if (ref) {
-      try {
-        const res = await fetch(
-          `https://api.supabase.com/v1/projects/${ref}/database/query`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({ query: SCHEMA_SQL }),
-          }
-        );
-
-        if (res.ok) {
-          return NextResponse.json({
-            success: true,
-            method: "management-api",
-            message: "All tables and indexes created successfully",
-          });
-        }
-
-        const errText = await res.text().catch(() => "unknown");
-        // Fall through to other methods
-        console.error("Management API failed:", res.status, errText);
-      } catch (err) {
-        console.error("Management API error:", err);
-      }
+    if (!ref) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Could not extract project ref from NEXT_PUBLIC_SUPABASE_URL. Expected format: https://<ref>.supabase.co",
+        },
+        { status: 400 }
+      );
     }
-  }
 
-  // Method 2: Service role key — try each statement individually
-  if (serviceKey) {
-    const statements = SCHEMA_SQL
-      .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith("--"));
-
-    const results: { sql: string; ok: boolean; error?: string }[] = [];
-
-    for (const sql of statements) {
-      const label = sql.replace(/\s+/g, " ").trim().slice(0, 80);
-      try {
-        // Try /pg/query endpoint first (Supabase Dashboard's internal endpoint)
-        const pgRes = await fetch(`${url}/pg/query`, {
+    try {
+      const res = await fetch(
+        `https://api.supabase.com/v1/projects/${ref}/database/query`,
+        {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
+            Authorization: `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({ query: sql }),
-        });
-
-        if (pgRes.ok) {
-          results.push({ sql: label, ok: true });
-          continue;
+          body: JSON.stringify({ query: SCHEMA_SQL }),
         }
+      );
 
-        // Try PostgREST RPC (requires exec_sql function to exist)
-        const rpcRes = await fetch(`${url}/rest/v1/rpc/exec_sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
-            Prefer: "return=minimal",
-          },
-          body: JSON.stringify({ query: sql }),
+      if (res.ok) {
+        return NextResponse.json({
+          success: true,
+          method: "management-api",
+          message: "All tables and indexes created successfully",
         });
+      }
 
-        if (rpcRes.ok) {
-          results.push({ sql: label, ok: true });
-        } else {
-          const errText = await rpcRes.text().catch(() => "unknown");
-          results.push({ sql: label, ok: false, error: errText });
-        }
-      } catch (err) {
-        results.push({
-          sql: label,
-          ok: false,
+      const errText = await res.text().catch(() => "unknown");
+      return NextResponse.json(
+        {
+          success: false,
+          method: "management-api",
+          error: `Management API returned ${res.status}: ${errText}`,
+          help: "Check that your SUPABASE_ACCESS_TOKEN is valid. Get a new one at https://supabase.com/dashboard/account/tokens",
+        },
+        { status: 500 }
+      );
+    } catch (err) {
+      return NextResponse.json(
+        {
+          success: false,
+          method: "management-api",
           error: err instanceof Error ? err.message : String(err),
-        });
-      }
+        },
+        { status: 500 }
+      );
     }
-
-    const allOk = results.every((r) => r.ok);
-    return NextResponse.json({
-      success: allOk,
-      method: "service-role",
-      results,
-      ...(allOk
-        ? {}
-        : {
-            help: "If tables failed: paste the SQL from supabase-schema.sql into your Supabase SQL Editor, or set SUPABASE_ACCESS_TOKEN (personal access token from supabase.com/dashboard/account/tokens)",
-          }),
-    });
   }
 
+  // No access token — return the schema SQL so the user can paste it manually
   return NextResponse.json(
     {
-      error: "No Supabase credentials configured",
-      help: "Set one of: SUPABASE_ACCESS_TOKEN (personal access token — recommended) or SUPABASE_SERVICE_ROLE_KEY in your Vercel env vars. Get your access token at https://supabase.com/dashboard/account/tokens",
+      success: false,
+      error: "SUPABASE_ACCESS_TOKEN is not configured",
+      help: "Set SUPABASE_ACCESS_TOKEN in your env vars, then call GET /api/setup-db again. Get your personal access token at https://supabase.com/dashboard/account/tokens. Alternatively, copy the SQL below and paste it into your Supabase SQL Editor.",
+      schema: SCHEMA_SQL,
     },
-    { status: 500 }
+    { status: 400 }
   );
 }
