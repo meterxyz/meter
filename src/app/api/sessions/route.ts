@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 
+// Namespace session IDs per user to prevent collisions
+// (e.g. all users start with session id "meter")
+function scopedId(userId: string, localId: string): string {
+  // Already scoped — don't double-prefix
+  if (localId.startsWith(`${userId}:`)) return localId;
+  return `${userId}:${localId}`;
+}
+
+function unscopedId(userId: string, dbId: string): string {
+  const prefix = `${userId}:`;
+  return dbId.startsWith(prefix) ? dbId.slice(prefix.length) : dbId;
+}
+
 // GET /api/sessions — load all sessions + messages for the authenticated user
 export async function GET() {
   const auth = await requireAuth();
@@ -40,9 +53,14 @@ export async function GET() {
       messagesBySession[sid].push(msg);
     }
 
+    // Return sessions with unscoped IDs so the client sees its original local IDs
     const result = (sessions ?? []).map((s) => ({
       ...s,
-      messages: messagesBySession[s.id] ?? [],
+      id: unscopedId(userId, s.id),
+      messages: (messagesBySession[s.id] ?? []).map((m) => ({
+        ...m,
+        session_id: unscopedId(userId, m.session_id as string),
+      })),
     }));
 
     return NextResponse.json({ sessions: result });
@@ -58,35 +76,52 @@ export async function DELETE(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { userId } = auth;
 
-  const sessionId = req.nextUrl.searchParams.get("sessionId");
+  const localSessionId = req.nextUrl.searchParams.get("sessionId");
 
-  if (!sessionId) {
+  if (!localSessionId) {
     return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
   }
+
+  // Try both scoped and unscoped IDs (for backward compat with old data)
+  const dbId = scopedId(userId, localSessionId);
 
   try {
     const supabase = getSupabaseServer();
 
-    // Verify the session belongs to this user
-    const { data: session, error: fetchErr } = await supabase
+    // Try scoped ID first, fall back to unscoped
+    let { data: session, error: fetchErr } = await supabase
       .from("chat_sessions")
       .select("id")
-      .eq("id", sessionId)
+      .eq("id", dbId)
       .eq("user_id", userId)
       .single();
+
+    if ((fetchErr || !session) && dbId !== localSessionId) {
+      // Fallback: try unscoped (old data)
+      const fallback = await supabase
+        .from("chat_sessions")
+        .select("id")
+        .eq("id", localSessionId)
+        .eq("user_id", userId)
+        .single();
+      session = fallback.data;
+      fetchErr = fallback.error;
+    }
 
     if (fetchErr || !session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
+    const actualId = session.id;
+
     // Delete messages first (cascade should handle this, but be explicit)
-    await supabase.from("chat_messages").delete().eq("session_id", sessionId);
+    await supabase.from("chat_messages").delete().eq("session_id", actualId);
 
     // Delete the session
     const { error: delErr } = await supabase
       .from("chat_sessions")
       .delete()
-      .eq("id", sessionId)
+      .eq("id", actualId)
       .eq("user_id", userId);
 
     if (delErr) throw delErr;
@@ -113,11 +148,27 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseServer();
+    const dbSessionId = scopedId(userId, session.id);
 
-    // Upsert the session
+    // Migrate: if an old unscoped row exists for this user, delete it first
+    // so we don't leave orphaned data
+    if (dbSessionId !== session.id) {
+      const { data: oldRow } = await supabase
+        .from("chat_sessions")
+        .select("id")
+        .eq("id", session.id)
+        .eq("user_id", userId)
+        .single();
+      if (oldRow) {
+        await supabase.from("chat_messages").delete().eq("session_id", session.id);
+        await supabase.from("chat_sessions").delete().eq("id", session.id).eq("user_id", userId);
+      }
+    }
+
+    // Upsert the session with scoped ID
     const { error: sessErr } = await supabase.from("chat_sessions").upsert(
       {
-        id: session.id,
+        id: dbSessionId,
         user_id: userId,
         project_name: session.name,
         total_cost: session.totalCost ?? 0,
@@ -137,7 +188,7 @@ export async function POST(req: NextRequest) {
     if (messages && messages.length > 0) {
       const rows = messages.map((m: Record<string, unknown>) => ({
         id: m.id,
-        session_id: session.id,
+        session_id: dbSessionId,
         role: m.role,
         content: m.content ?? "",
         model: m.model ?? null,
