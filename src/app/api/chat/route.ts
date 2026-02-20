@@ -1,7 +1,8 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/tools";
 import { streamWithFallback, type Send } from "@/lib/fallback";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 import type OpenAI from "openai";
 
 type Message = OpenAI.Chat.ChatCompletionMessageParam;
@@ -17,11 +18,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const { messages, model, userId, projectId, connectedServices } = await req.json();
+    const { messages, model, projectId, connectedServices } = await req.json();
 
     // Server-side spend limit enforcement
-    if (userId && projectId) {
+    if (projectId) {
       const limitCheck = await checkSpendLimits(userId, projectId);
       if (limitCheck) {
         return new Response(

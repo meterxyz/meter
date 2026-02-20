@@ -133,6 +133,11 @@ export function LoginScreen() {
     cardLast4: string | null;
     gmailConnected: boolean;
   }) => {
+    // Defensive: clear stale data if a different user was previously logged in
+    const currentUserId = useMeterStore.getState().userId;
+    if (currentUserId && currentUserId !== user.id) {
+      useMeterStore.getState().logout();
+    }
     setAuth(user.id, user.email);
     if (user.cardOnFile) {
       setCardOnFile(true, user.cardLast4 ?? undefined);

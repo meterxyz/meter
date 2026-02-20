@@ -25,7 +25,7 @@ export function ProfileSettings({ open, onClose }: { open: boolean; onClose: () 
 
   useEffect(() => {
     if (!open || !userId) return;
-    fetch(`/api/auth/passkeys?userId=${encodeURIComponent(userId)}`)
+    fetch("/api/auth/passkeys")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.passkeys) setPasskeys(data.passkeys);
@@ -48,7 +48,7 @@ export function ProfileSettings({ open, onClose }: { open: boolean; onClose: () 
       const res = await fetch("/api/account/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Deletion failed" }));

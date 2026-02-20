@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const userId = req.nextUrl.searchParams.get("userId");
     const workspaceId = req.nextUrl.searchParams.get("workspaceId");
-    if (!userId || !workspaceId) {
-      return NextResponse.json({ error: "userId and workspaceId required" }, { status: 400 });
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();

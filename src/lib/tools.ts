@@ -330,13 +330,14 @@ async function saveDecision(
   args: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<string> {
+  if (!ctx.userId) return "Cannot save decision: not authenticated.";
   try {
     const supabase = getSupabaseServer();
     const id = `dec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await supabase.from("decisions").insert({
       id,
-      user_id: ctx.userId || "anonymous",
+      user_id: ctx.userId,
       title: args.title as string,
       status: "decided",
       choice: args.choice as string,
@@ -354,12 +355,13 @@ async function saveDecision(
 /* ── list_decisions ────────────────────────────────────────────── */
 
 async function listDecisions(ctx: ToolContext): Promise<string> {
+  if (!ctx.userId) return "Cannot list decisions: not authenticated.";
   try {
     const supabase = getSupabaseServer();
     const { data } = await supabase
       .from("decisions")
       .select("*")
-      .eq("user_id", ctx.userId || "anonymous")
+      .eq("user_id", ctx.userId)
       .eq("archived", false)
       .order("created_at", { ascending: false })
       .limit(20);

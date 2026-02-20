@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
 import { batchSettle, SettlementItem } from "@/lib/base";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  try {
-    const { userId, stripeCustomerId, workspaceId, amount, messageIds, chargeIds } = await req.json();
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
 
-    if (!userId || !workspaceId || !amount || amount <= 0) {
-      return NextResponse.json({ error: "userId, workspaceId, and positive amount required" }, { status: 400 });
+  try {
+    const { stripeCustomerId, workspaceId, amount, messageIds, chargeIds } = await req.json();
+
+    if (!workspaceId || !amount || amount <= 0) {
+      return NextResponse.json({ error: "workspaceId and positive amount required" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();

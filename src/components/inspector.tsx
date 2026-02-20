@@ -46,10 +46,10 @@ export function Inspector() {
 
     // Delete server-side session
     const sessionId = activeCompany.sessionId;
-    if (sessionId && userId) {
+    if (sessionId) {
       try {
         await fetch(
-          `/api/sessions?sessionId=${encodeURIComponent(sessionId)}&userId=${encodeURIComponent(userId)}`,
+          `/api/sessions?sessionId=${encodeURIComponent(sessionId)}`,
           { method: "DELETE" }
         );
       } catch {
@@ -259,7 +259,7 @@ function ConnectionsTab() {
     if (isApiKeyProvider(providerId)) {
       setApiKeyProvider(providerId);
     } else {
-      initiateOAuthFlow(providerId, userId, activeProjectId);
+      initiateOAuthFlow(providerId, activeProjectId);
     }
   };
 

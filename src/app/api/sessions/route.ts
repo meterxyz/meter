@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
-// GET /api/sessions?userId=xxx — load all sessions + messages for a user
-export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-  }
+// GET /api/sessions — load all sessions + messages for the authenticated user
+export async function GET() {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
 
   try {
     const supabase = getSupabaseServer();
@@ -52,13 +52,16 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// DELETE /api/sessions?sessionId=xxx&userId=xxx — delete a session and its messages
+// DELETE /api/sessions?sessionId=xxx — delete a session and its messages
 export async function DELETE(req: NextRequest) {
-  const sessionId = req.nextUrl.searchParams.get("sessionId");
-  const userId = req.nextUrl.searchParams.get("userId");
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
 
-  if (!sessionId || !userId) {
-    return NextResponse.json({ error: "Missing sessionId or userId" }, { status: 400 });
+  const sessionId = req.nextUrl.searchParams.get("sessionId");
+
+  if (!sessionId) {
+    return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
   }
 
   try {
@@ -97,12 +100,16 @@ export async function DELETE(req: NextRequest) {
 
 // POST /api/sessions — save/sync a session with its messages
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
     const body = await req.json();
-    const { userId, session, messages } = body;
+    const { session, messages } = body;
 
-    if (!userId || !session) {
-      return NextResponse.json({ error: "Missing userId or session" }, { status: 400 });
+    if (!session) {
+      return NextResponse.json({ error: "Missing session" }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();

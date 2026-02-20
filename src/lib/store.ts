@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DEFAULT_MODEL, getModel } from "@/lib/models";
 import { CONNECTORS } from "@/lib/connectors";
+import { useWorkspaceStore } from "@/lib/workspace-store";
+import { useDecisionsStore } from "@/lib/decisions-store";
 
 export type ReceiptStatus = "signing" | "signed" | "settled";
 
@@ -323,12 +325,11 @@ export const useMeterStore = create<MeterState>()(
         }),
 
       fetchConnectionStatus: async () => {
-        const userId = get().userId;
         const workspaceId = get().activeProjectId;
-        if (!userId || !workspaceId) return;
+        if (!workspaceId) return;
         set({ connectionsLoading: true });
         try {
-          const res = await fetch(`/api/oauth/status?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(workspaceId)}`);
+          const res = await fetch(`/api/oauth/status?workspaceId=${encodeURIComponent(workspaceId)}`);
           if (res.ok) {
             const serverStatus = await res.json() as Record<string, boolean>;
             set((s) => {
@@ -351,9 +352,8 @@ export const useMeterStore = create<MeterState>()(
       },
 
       disconnectServiceRemote: async (id) => {
-        const userId = get().userId;
         const workspaceId = get().activeProjectId;
-        if (!userId || !workspaceId) return;
+        if (!workspaceId) return;
         set((s) => {
           const active = getActiveProject(s);
           const updated = { ...active, connectedServices: { ...active.connectedServices, [id]: false } };
@@ -363,7 +363,7 @@ export const useMeterStore = create<MeterState>()(
           await fetch(`/api/oauth/${id}/disconnect`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, workspaceId }),
+            body: JSON.stringify({ workspaceId }),
           });
         } catch {
           // Silently fail
@@ -371,14 +371,13 @@ export const useMeterStore = create<MeterState>()(
       },
 
       submitApiKey: async (provider, apiKey, metadata) => {
-        const userId = get().userId;
         const workspaceId = get().activeProjectId;
-        if (!userId || !workspaceId) return { ok: false, error: "Not authenticated" };
+        if (!workspaceId) return { ok: false, error: "Not authenticated" };
         try {
           const res = await fetch("/api/oauth/api-key", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, provider, workspaceId, apiKey, metadata: metadata ?? null }),
+            body: JSON.stringify({ provider, workspaceId, apiKey, metadata: metadata ?? null }),
           });
           if (res.ok) {
             set((s) => {
@@ -403,7 +402,11 @@ export const useMeterStore = create<MeterState>()(
         }
       },
 
-      logout: () =>
+      logout: () => {
+        // Fire-and-forget server-side session cleanup
+        fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+
+        // Clear this store
         set({
           userId: null,
           email: null,
@@ -417,7 +420,38 @@ export const useMeterStore = create<MeterState>()(
           inspectorOpen: false,
           pendingCharges: [],
           isSettling: false,
-        }),
+          cards: [],
+          settlementHistory: [],
+          spendLimits: { dailyLimit: null, monthlyLimit: null, perTxnLimit: null },
+        });
+
+        // Clear workspace store
+        useWorkspaceStore.setState({
+          companies: [],
+          projects: [],
+          activeCompanyId: null,
+          activeProjectId: null,
+        });
+
+        // Clear decisions store
+        useDecisionsStore.setState({
+          decisions: [],
+          panelOpen: false,
+          filter: "all",
+        });
+
+        // Remove persisted localStorage for other stores + drafts
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("workspace-store-v1");
+          localStorage.removeItem("decisions-store-v1");
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith("meter:draft:")) keysToRemove.push(key);
+          }
+          keysToRemove.forEach((k) => localStorage.removeItem(k));
+        }
+      },
 
       addProject: (name, idOverride) =>
         set((s) => {
@@ -629,7 +663,6 @@ export const useMeterStore = create<MeterState>()(
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              userId: s.userId,
               stripeCustomerId: s.stripeCustomerId,
               workspaceId: active.id,
               amount,
@@ -778,11 +811,9 @@ export const useMeterStore = create<MeterState>()(
         }),
 
       fetchCards: async () => {
-        const userId = get().userId;
-        if (!userId) return;
         set({ cardsLoading: true });
         try {
-          const res = await fetch(`/api/billing/cards?userId=${encodeURIComponent(userId)}`);
+          const res = await fetch("/api/billing/cards");
           if (res.ok) {
             const data = await res.json();
             set({ cards: data.cards ?? [] });
@@ -793,13 +824,11 @@ export const useMeterStore = create<MeterState>()(
       },
 
       setDefaultCard: async (paymentMethodId) => {
-        const userId = get().userId;
-        if (!userId) return;
         try {
           const res = await fetch("/api/billing/cards/default", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, paymentMethodId }),
+            body: JSON.stringify({ paymentMethodId }),
           });
           if (res.ok) {
             const data = await res.json();
@@ -813,10 +842,8 @@ export const useMeterStore = create<MeterState>()(
       },
 
       removeCard: async (paymentMethodId) => {
-        const userId = get().userId;
-        if (!userId) return { success: false, error: "Not authenticated" };
         try {
-          const res = await fetch(`/api/billing/cards/${paymentMethodId}?userId=${encodeURIComponent(userId)}`, {
+          const res = await fetch(`/api/billing/cards/${paymentMethodId}`, {
             method: "DELETE",
           });
           if (!res.ok) {
@@ -832,12 +859,11 @@ export const useMeterStore = create<MeterState>()(
       },
 
       fetchSettlementHistory: async (workspaceId) => {
-        const userId = get().userId;
         const projectId = workspaceId ?? get().activeProjectId;
-        if (!userId || !projectId) return;
+        if (!projectId) return;
         set({ settlementHistoryLoading: true });
         try {
-          const res = await fetch(`/api/billing/history?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(projectId)}`);
+          const res = await fetch(`/api/billing/history?workspaceId=${encodeURIComponent(projectId)}`);
           if (res.ok) {
             const data = await res.json();
             set({ settlementHistory: data.history ?? [] });
@@ -848,11 +874,10 @@ export const useMeterStore = create<MeterState>()(
       },
 
       fetchSpendLimits: async (workspaceId) => {
-        const userId = get().userId;
         const projectId = workspaceId ?? get().activeProjectId;
-        if (!userId || !projectId) return;
+        if (!projectId) return;
         try {
-          const res = await fetch(`/api/billing/spend-limits?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(projectId)}`);
+          const res = await fetch(`/api/billing/spend-limits?workspaceId=${encodeURIComponent(projectId)}`);
           if (res.ok) {
             const data = await res.json();
             set({ spendLimits: { dailyLimit: data.dailyLimit ?? null, monthlyLimit: data.monthlyLimit ?? null, perTxnLimit: data.perTxnLimit ?? null } });
@@ -861,16 +886,15 @@ export const useMeterStore = create<MeterState>()(
       },
 
       updateSpendLimits: async (limits, workspaceId) => {
-        const userId = get().userId;
         const projectId = workspaceId ?? get().activeProjectId;
-        if (!userId || !projectId) return;
+        if (!projectId) return;
         const merged = { ...get().spendLimits, ...limits };
         set({ spendLimits: merged });
         try {
           await fetch("/api/billing/spend-limits", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, workspaceId: projectId, ...merged }),
+            body: JSON.stringify({ workspaceId: projectId, ...merged }),
           });
         } catch { /* silent */ }
       },

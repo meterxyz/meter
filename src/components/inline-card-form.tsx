@@ -42,7 +42,7 @@ function CardFormInner() {
         const res = await fetch("/api/billing/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, setupIntentId: setupIntent.id }),
+          body: JSON.stringify({ setupIntentId: setupIntent.id }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to confirm");
@@ -93,7 +93,7 @@ export function InlineCardForm() {
     fetch("/api/billing/setup-intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({}),
     })
       .then((res) => res.json())
       .then((data) => {

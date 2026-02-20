@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 // POST /api/billing/setup-intent — create Stripe SetupIntent for saving a card
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   try {
-    const { userId } = await req.json();
-    if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 });
-    }
 
     const supabase = getSupabaseServer();
 

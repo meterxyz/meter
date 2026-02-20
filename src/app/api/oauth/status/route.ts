@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConnectionStatus } from "@/lib/oauth";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get("userId");
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
+
   const workspaceId = req.nextUrl.searchParams.get("workspaceId");
 
-  if (!userId || !workspaceId) {
-    return NextResponse.json({ error: "Missing userId or workspaceId" }, { status: 400 });
+  if (!workspaceId) {
+    return NextResponse.json({ error: "Missing workspaceId" }, { status: 400 });
   }
 
   const status = await getConnectionStatus(userId, workspaceId);
