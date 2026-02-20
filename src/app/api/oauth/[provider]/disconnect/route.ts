@@ -7,13 +7,13 @@ export async function POST(
   { params }: { params: Promise<{ provider: string }> }
 ) {
   const { provider: providerId } = await params;
-  const { userId } = await req.json();
+  const { userId, workspaceId } = await req.json();
 
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId || !workspaceId) {
+    return NextResponse.json({ error: "Missing userId or workspaceId" }, { status: 400 });
   }
 
-  await deleteToken(userId, providerId);
+  await deleteToken(userId, providerId, workspaceId);
 
   // Backward compat: update gmail_connected field
   if (providerId === "gmail") {

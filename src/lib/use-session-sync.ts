@@ -69,6 +69,7 @@ export function useSessionSync() {
       todayByModel: {},
       todayDate: (session.today_date as string) ?? todayStr(),
       totalCost: Math.max(totalFromSession, totalFromMessages),
+      connectedServices: {},
     };
   };
 

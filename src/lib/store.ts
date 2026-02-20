@@ -75,6 +75,7 @@ interface ProjectThread {
   todayByModel: Record<string, { cost: number; count: number }>;
   todayDate: string;
   totalCost: number;
+  connectedServices: Record<string, boolean>;
 }
 
 interface MeterState {
@@ -85,7 +86,6 @@ interface MeterState {
   cardLast4: string | null;
   cardBrand: string | null;
   stripeCustomerId: string | null;
-  connectedServices: Record<string, boolean>;
   connectionsLoading: boolean;
 
   selectedModelId: string;
@@ -197,6 +197,7 @@ function createProject(id: string, name: string): ProjectThread {
     todayByModel: {},
     todayDate: todayStr(),
     totalCost: 0,
+    connectedServices: {},
   };
 }
 
@@ -241,7 +242,6 @@ export const useMeterStore = create<MeterState>()(
       cardLast4: null,
       cardBrand: null,
       stripeCustomerId: null,
-      connectedServices: {},
       connectionsLoading: false,
 
       selectedModelId: DEFAULT_MODEL.id,
@@ -272,19 +272,32 @@ export const useMeterStore = create<MeterState>()(
       setCardOnFile: (v, last4, brand) => set({ cardOnFile: v, cardLast4: last4 ?? null, cardBrand: brand ?? null }),
       setStripeCustomerId: (id) => set({ stripeCustomerId: id }),
       connectService: (id) =>
-        set((s) => ({ connectedServices: { ...s.connectedServices, [id]: true } })),
+        set((s) => {
+          const active = getActiveProject(s);
+          const updated = { ...active, connectedServices: { ...active.connectedServices, [id]: true } };
+          return { projects: replaceActiveProject(s, updated) };
+        }),
       disconnectService: (id) =>
-        set((s) => ({ connectedServices: { ...s.connectedServices, [id]: false } })),
+        set((s) => {
+          const active = getActiveProject(s);
+          const updated = { ...active, connectedServices: { ...active.connectedServices, [id]: false } };
+          return { projects: replaceActiveProject(s, updated) };
+        }),
 
       fetchConnectionStatus: async () => {
         const userId = get().userId;
-        if (!userId) return;
+        const workspaceId = get().activeProjectId;
+        if (!userId || !workspaceId) return;
         set({ connectionsLoading: true });
         try {
-          const res = await fetch(`/api/oauth/status?userId=${encodeURIComponent(userId)}`);
+          const res = await fetch(`/api/oauth/status?userId=${encodeURIComponent(userId)}&workspaceId=${encodeURIComponent(workspaceId)}`);
           if (res.ok) {
             const status = await res.json();
-            set({ connectedServices: status });
+            set((s) => {
+              const active = getActiveProject(s);
+              const updated = { ...active, connectedServices: status };
+              return { projects: replaceActiveProject(s, updated) };
+            });
           }
         } catch {
           // Silently fail — local state remains
@@ -295,13 +308,18 @@ export const useMeterStore = create<MeterState>()(
 
       disconnectServiceRemote: async (id) => {
         const userId = get().userId;
-        if (!userId) return;
-        set((s) => ({ connectedServices: { ...s.connectedServices, [id]: false } }));
+        const workspaceId = get().activeProjectId;
+        if (!userId || !workspaceId) return;
+        set((s) => {
+          const active = getActiveProject(s);
+          const updated = { ...active, connectedServices: { ...active.connectedServices, [id]: false } };
+          return { projects: replaceActiveProject(s, updated) };
+        });
         try {
           await fetch(`/api/oauth/${id}/disconnect`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId }),
+            body: JSON.stringify({ userId, workspaceId }),
           });
         } catch {
           // Silently fail
@@ -310,15 +328,20 @@ export const useMeterStore = create<MeterState>()(
 
       submitApiKey: async (provider, apiKey, metadata) => {
         const userId = get().userId;
-        if (!userId) return false;
+        const workspaceId = get().activeProjectId;
+        if (!userId || !workspaceId) return false;
         try {
           const res = await fetch("/api/oauth/api-key", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, provider, apiKey, metadata: metadata ?? null }),
+            body: JSON.stringify({ userId, provider, workspaceId, apiKey, metadata: metadata ?? null }),
           });
           if (res.ok) {
-            set((s) => ({ connectedServices: { ...s.connectedServices, [provider]: true } }));
+            set((s) => {
+              const active = getActiveProject(s);
+              const updated = { ...active, connectedServices: { ...active.connectedServices, [provider]: true } };
+              return { projects: replaceActiveProject(s, updated) };
+            });
             return true;
           }
           return false;
@@ -336,7 +359,6 @@ export const useMeterStore = create<MeterState>()(
           cardLast4: null,
           cardBrand: null,
           stripeCustomerId: null,
-          connectedServices: {},
           projects: initialProjects,
           activeProjectId: "meter",
           inspectorOpen: false,
@@ -363,12 +385,15 @@ export const useMeterStore = create<MeterState>()(
           return { projects: remaining, activeProjectId: nextActiveId };
         }),
 
-      setActiveProject: (id) =>
+      setActiveProject: (id) => {
         set((s) => {
           if (!s.projects.some((p) => p.id === id)) return s;
           const projects = s.projects.map((p) => (p.id === id ? ensureDaily(p) : p));
           return { projects, activeProjectId: id };
-        }),
+        });
+        // Re-fetch connection status for the newly active workspace
+        get().fetchConnectionStatus();
+      },
 
       addMessage: (msg) =>
         set((s) => {
@@ -837,7 +862,6 @@ export const useMeterStore = create<MeterState>()(
         cardLast4: s.cardLast4,
         cardBrand: s.cardBrand,
         stripeCustomerId: s.stripeCustomerId,
-        connectedServices: s.connectedServices,
         selectedModelId: s.selectedModelId,
         spendingCapEnabled: s.spendingCapEnabled,
         spendingCap: s.spendingCap,
@@ -848,3 +872,9 @@ export const useMeterStore = create<MeterState>()(
     }
   )
 );
+
+/** Selector: connectedServices for the active workspace */
+export const selectConnectedServices = (s: MeterState) => {
+  const active = s.projects.find((p) => p.id === s.activeProjectId);
+  return active?.connectedServices ?? {};
+};

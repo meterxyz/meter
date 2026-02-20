@@ -16,9 +16,10 @@ export async function GET(
   try {
     const { provider: providerId } = await params;
     const userId = req.nextUrl.searchParams.get("userId");
+    const workspaceId = req.nextUrl.searchParams.get("workspaceId");
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (!userId || !workspaceId) {
+      return NextResponse.json({ error: "Missing userId or workspaceId" }, { status: 400 });
     }
 
     const provider = OAUTH_PROVIDERS[providerId];
@@ -30,12 +31,13 @@ export async function GET(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://meter.chat";
     const redirectUri = `${appUrl}/api/oauth/${providerId}/callback`;
 
-    // Store state for CSRF validation
+    // Store state for CSRF validation (includes workspace context)
     const supabase = getSupabaseServer();
     await supabase.from("oauth_state").insert({
       id: state,
       user_id: userId,
       provider: providerId,
+      workspace_id: workspaceId,
       expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 min
     });
 

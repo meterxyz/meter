@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { useMeterStore, ChatMessage } from "@/lib/store";
+import { useMeterStore, selectConnectedServices, ChatMessage } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { HeaderMeter } from "@/components/header-meter";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
@@ -529,7 +529,7 @@ export function ChatView() {
     }
   }, [pendingInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const connectedServices = useMeterStore((s) => s.connectedServices);
+  const connectedServices = useMeterStore(selectConnectedServices);
   const logout = useMeterStore((s) => s.logout);
 
   const scrollToBottom = useCallback(() => {
