@@ -13,11 +13,15 @@ export async function createSession(userId: string): Promise<string> {
     Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
   );
 
-  await supabase.from("auth_sessions").insert({
+  const { error } = await supabase.from("auth_sessions").insert({
     token,
     user_id: userId,
     expires_at: expiresAt.toISOString(),
   });
+
+  if (error) {
+    throw new Error(`Failed to create session: ${error.message}`);
+  }
 
   return token;
 }

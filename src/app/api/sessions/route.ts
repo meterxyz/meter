@@ -149,9 +149,11 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseServer();
     const dbSessionId = scopedId(userId, session.id);
+    const clientHasMessages = Array.isArray(messages) && messages.length > 0;
 
-    // Migrate: if an old unscoped row exists for this user, delete it first
-    // so we don't leave orphaned data
+    // Migrate: if an old unscoped row exists for this user, move it to scoped ID.
+    // Only delete old messages if the client has messages to replace them with —
+    // otherwise preserve the server-side data by re-pointing messages to the new ID.
     if (dbSessionId !== session.id) {
       const { data: oldRow } = await supabase
         .from("chat_sessions")
@@ -160,7 +162,35 @@ export async function POST(req: NextRequest) {
         .eq("user_id", userId)
         .single();
       if (oldRow) {
-        await supabase.from("chat_messages").delete().eq("session_id", session.id);
+        if (clientHasMessages) {
+          // Client has data — delete old messages (client data will replace them)
+          await supabase.from("chat_messages").delete().eq("session_id", session.id);
+        } else {
+          // Client is empty — preserve old messages by creating the scoped session first,
+          // then re-pointing messages to it
+          const { error: seedErr } = await supabase.from("chat_sessions").upsert(
+            {
+              id: dbSessionId,
+              user_id: userId,
+              project_name: session.name,
+              total_cost: session.totalCost ?? 0,
+              today_cost: session.todayCost ?? 0,
+              today_tokens_in: session.todayTokensIn ?? 0,
+              today_tokens_out: session.todayTokensOut ?? 0,
+              today_message_count: session.todayMessageCount ?? 0,
+              today_date: session.todayDate,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" }
+          );
+          if (!seedErr) {
+            await supabase
+              .from("chat_messages")
+              .update({ session_id: dbSessionId })
+              .eq("session_id", session.id);
+          }
+        }
+        // Remove the old unscoped session row
         await supabase.from("chat_sessions").delete().eq("id", session.id).eq("user_id", userId);
       }
     }
@@ -185,7 +215,7 @@ export async function POST(req: NextRequest) {
     if (sessErr) throw sessErr;
 
     // Upsert messages in batches
-    if (messages && messages.length > 0) {
+    if (clientHasMessages) {
       const rows = messages.map((m: Record<string, unknown>) => ({
         id: m.id,
         session_id: dbSessionId,
