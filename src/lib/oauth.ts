@@ -62,6 +62,7 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
   mercury: { id: "mercury", name: "Mercury", type: "api_key", clientIdEnv: "", clientSecretEnv: "" },
   ramp: { id: "ramp", name: "Ramp", type: "api_key", clientIdEnv: "", clientSecretEnv: "" },
   supabase: { id: "supabase", name: "Supabase", type: "api_key", clientIdEnv: "", clientSecretEnv: "" },
+  posthog: { id: "posthog", name: "PostHog", type: "api_key", clientIdEnv: "", clientSecretEnv: "" },
 };
 
 /* ─── Token encryption ────────────────────────────────────────── */
