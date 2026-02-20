@@ -10,6 +10,7 @@ import { ProfileSettings } from "@/components/profile-settings";
 import { ActionCard } from "@/components/action-card";
 import { ActionsBar } from "@/components/actions-bar";
 import { WorkspaceBar } from "@/components/workspace-bar";
+import { InlineCardForm } from "@/components/inline-card-form";
 import { getModel, shortModelName } from "@/lib/models";
 import { useSessionSync } from "@/lib/use-session-sync";
 import { useDecisionsStore } from "@/lib/decisions-store";
@@ -218,6 +219,7 @@ export function ChatView() {
   }, [decisions, meterProjectId, updateDecision]);
 
   const userId = useMeterStore((s) => s.userId);
+  const cardOnFile = useMeterStore((s) => s.cardOnFile);
   const chatBlocked = activeProject?.chatBlocked ?? false;
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -270,13 +272,7 @@ export function ChatView() {
     return () => document.removeEventListener("mousedown", handler);
   }, [logoMenuOpen]);
 
-  const openedRef = useRef(false);
-  useEffect(() => {
-    if (openedRef.current) return;
-    openedRef.current = true;
-    setInspectorOpen(true);
-    setInspectorTab("decisions");
-  }, [setInspectorOpen, setInspectorTab]);
+  // Inspector starts closed; user can open it manually
 
   const handleProjectSwitch = (projectId: string) => {
     if (projectId === activeProjectId) {
@@ -354,7 +350,7 @@ export function ChatView() {
 
   const handleSend = async () => {
     const input = inputRef.current;
-    if (!input || !input.value.trim() || isStreaming) return;
+    if (!input || !input.value.trim() || isStreaming || !cardOnFile) return;
 
     if (chatBlocked) {
       const userContent = input.value.trim();
@@ -618,7 +614,22 @@ export function ChatView() {
         {/* Messages */}
         <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-2xl px-4 py-6">
-            {messages.length === 0 && (
+            {messages.length === 0 && !cardOnFile && (
+              <div className="mb-4">
+                <div className="flex gap-3 justify-start">
+                  <div className="relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed text-foreground">
+                    <div className="prose prose-sm prose-invert max-w-none prose-p:my-1">
+                      <p>Hi, I&apos;m <strong>Meter</strong> — your AI assistant with access to every frontier model.</p>
+                      <p>I can help you write code, analyze data, search the web, manage your databases, and more. Every response shows the exact cost in real time.</p>
+                      <p>To get started, add a payment method below. You won&apos;t be charged now — billing happens at $10 or monthly, whichever comes first.</p>
+                    </div>
+                    <InlineCardForm />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {messages.length === 0 && cardOnFile && (
               <div className="flex flex-col items-center justify-center gap-3 py-24">
                 <p className="text-sm text-muted-foreground">What are you building in {activeProject?.name ?? "this workspace"}?</p>
                 <p className="font-mono text-[10px] text-muted-foreground/40">Every model available. The meter runs in dollars.</p>
@@ -713,9 +724,10 @@ export function ChatView() {
                 <textarea
                   ref={inputRef}
                   onKeyDown={handleKeyDown}
-                  placeholder="Say something..."
+                  placeholder={cardOnFile ? "Say something..." : "Add a card to start chatting..."}
+                  disabled={!cardOnFile}
                   rows={1}
-                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ maxHeight: "120px" }}
                   onInput={(e) => {
                     const t = e.currentTarget;
@@ -726,7 +738,7 @@ export function ChatView() {
                 <MeterPill />
                 <button
                   onClick={handleSend}
-                  disabled={isStreaming}
+                  disabled={isStreaming || !cardOnFile}
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:opacity-40"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

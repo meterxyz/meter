@@ -23,9 +23,10 @@ export async function POST(req: NextRequest) {
     await storeApiKey(userId, provider, workspaceId, apiKey, metadata ?? null);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error(`API key storage error for ${provider}:`, err);
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error(`API key storage error for ${provider}:`, msg);
     return NextResponse.json(
-      { error: "Failed to store API key" },
+      { error: msg },
       { status: 500 }
     );
   }

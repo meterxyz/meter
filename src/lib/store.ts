@@ -127,7 +127,7 @@ interface MeterState {
   disconnectService: (id: string) => void;
   fetchConnectionStatus: () => Promise<void>;
   disconnectServiceRemote: (id: string) => Promise<void>;
-  submitApiKey: (provider: string, apiKey: string, metadata?: Record<string, unknown>) => Promise<boolean>;
+  submitApiKey: (provider: string, apiKey: string, metadata?: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
 
   addProject: (name: string, id?: string) => void;
@@ -360,7 +360,7 @@ export const useMeterStore = create<MeterState>()(
       submitApiKey: async (provider, apiKey, metadata) => {
         const userId = get().userId;
         const workspaceId = get().activeProjectId;
-        if (!userId || !workspaceId) return false;
+        if (!userId || !workspaceId) return { ok: false, error: "Not authenticated" };
         try {
           const res = await fetch("/api/oauth/api-key", {
             method: "POST",
@@ -381,11 +381,12 @@ export const useMeterStore = create<MeterState>()(
                 return { projects: replaceActiveProject(s, updated) };
               });
             }
-            return true;
+            return { ok: true };
           }
-          return false;
-        } catch {
-          return false;
+          const body = await res.json().catch(() => ({}));
+          return { ok: false, error: body.error ?? `Server error (${res.status})` };
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : "Network error" };
         }
       },
 

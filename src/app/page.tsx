@@ -5,13 +5,11 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useMeterStore } from "@/lib/store";
 import { ChatView } from "@/components/chat-view";
 import { LoginScreen } from "@/components/login-screen";
-import { AuthorizeScreen } from "@/components/authorize-screen";
 
 function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const authenticated = useMeterStore((s) => s.authenticated);
-  const cardOnFile = useMeterStore((s) => s.cardOnFile);
   const connectService = useMeterStore((s) => s.connectService);
   const fetchConnectionStatus = useMeterStore((s) => s.fetchConnectionStatus);
 
@@ -33,13 +31,9 @@ function HomeInner() {
     }
   }, [authenticated, fetchConnectionStatus]);
 
-  // Flow: Passkey → Card → Chat
+  // Flow: Passkey → Chat (card is requested via AI intro message)
   if (!authenticated) {
     return <LoginScreen />;
-  }
-
-  if (!cardOnFile) {
-    return <AuthorizeScreen />;
   }
 
   return <ChatView />;
