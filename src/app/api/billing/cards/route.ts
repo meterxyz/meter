@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
-import { getSupabaseServer } from "@/lib/supabase";
+import { stripe, ensureStripeCustomer } from "@/lib/stripe";
 import { requireAuth } from "@/lib/auth";
 
 export async function GET() {
@@ -9,18 +8,9 @@ export async function GET() {
   const { userId } = auth;
 
   try {
-    const supabase = getSupabaseServer();
-    const { data: user } = await supabase
-      .from("meter_users")
-      .select("stripe_customer_id")
-      .eq("id", userId)
-      .single();
+    const customerId = await ensureStripeCustomer(userId);
 
-    if (!user?.stripe_customer_id) {
-      return NextResponse.json({ cards: [] });
-    }
-
-    const customer = await stripe.customers.retrieve(user.stripe_customer_id);
+    const customer = await stripe.customers.retrieve(customerId);
     if (customer.deleted) {
       return NextResponse.json({ cards: [] });
     }
@@ -31,7 +21,7 @@ export async function GET() {
         : customer.invoice_settings?.default_payment_method?.id ?? null;
 
     const methods = await stripe.customers.listPaymentMethods(
-      user.stripe_customer_id,
+      customerId,
       { type: "card", limit: 10 }
     );
 

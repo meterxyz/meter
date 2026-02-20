@@ -63,7 +63,7 @@ function CardFormInner() {
       <div className="mt-2 rounded-lg border border-border/30 px-3 py-2">
         <p className="font-mono text-[10px] text-muted-foreground/50 leading-relaxed">
           No charge now. We verify your card and save it for billing.
-          You&apos;re charged at $10 or monthly, whichever comes first.
+          Usage settles automatically once per day at midnight.
         </p>
       </div>
 

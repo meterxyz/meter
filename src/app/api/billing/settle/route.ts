@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, ensureStripeCustomer } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
 import { batchSettle, SettlementItem } from "@/lib/base";
 import { requireAuth } from "@/lib/auth";
@@ -32,20 +32,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Resolve Stripe customer ID
-    let customerId = stripeCustomerId;
-    if (!customerId) {
-      const { data: user } = await supabase
-        .from("meter_users")
-        .select("stripe_customer_id")
-        .eq("id", userId)
-        .single();
-      customerId = user?.stripe_customer_id;
-    }
-
-    if (!customerId) {
-      return NextResponse.json({ error: "No Stripe customer found" }, { status: 400 });
-    }
+    // Resolve Stripe customer (auto-creates if stale/missing)
+    const customerId = await ensureStripeCustomer(userId);
 
     // Get customer's default payment method
     const customer = await stripe.customers.retrieve(customerId);
