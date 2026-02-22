@@ -19,7 +19,7 @@ export interface ActionCard {
 
 export interface DebateTurn {
   model: string;
-  phase: "opening" | "challenge";
+  phase: "opening" | "challenge" | "rebuttal";
   content: string;
 }
 

@@ -7,6 +7,7 @@ import type { DebateTurn } from "@/lib/store";
 const PHASE_LABELS: Record<string, string> = {
   opening: "Opening",
   challenge: "Challenge",
+  rebuttal: "Rebuttal",
 };
 
 interface DebateTraceProps {
