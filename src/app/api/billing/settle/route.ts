@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe, ensureStripeCustomer } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase";
 import { batchSettle, SettlementItem } from "@/lib/base";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, isSuperAdmin } from "@/lib/auth";
 
 function scopedSessionId(userId: string, localId: string): string {
   if (localId.startsWith(`${userId}:`)) return localId;
@@ -22,6 +22,38 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseServer();
   const dbSessionId = scopedSessionId(userId, workspaceId);
+
+  // Superadmin accounts don't charge — just mark messages settled and record it
+  if (await isSuperAdmin(userId)) {
+    if (messageIds && messageIds.length > 0) {
+      await supabase
+        .from("chat_messages")
+        .update({ settled: true, receipt_status: "settled" })
+        .in("id", messageIds);
+    }
+    const historyId = `stl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    await supabase.from("settlement_history").insert({
+      id: historyId,
+      user_id: userId,
+      workspace_id: workspaceId,
+      amount,
+      stripe_payment_intent_id: null,
+      tx_hash: null,
+      message_count: messageIds?.length ?? 0,
+      charge_count: chargeIds?.length ?? 0,
+      card_last4: null,
+      card_brand: null,
+      status: "waived",
+    }).then(() => {}, (e: unknown) => console.error("Failed to write settlement history:", e));
+
+    return NextResponse.json({
+      success: true,
+      paymentIntentId: null,
+      txHash: null,
+      amountCharged: 0,
+      waived: true,
+    });
+  }
 
   async function markSettlementFailed() {
     await supabase

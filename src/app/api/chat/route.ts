@@ -3,7 +3,7 @@ import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/too
 import { streamWithFallback, type Send } from "@/lib/fallback";
 import { runDebate } from "@/lib/debate";
 import { getSupabaseServer } from "@/lib/supabase";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, isSuperAdmin } from "@/lib/auth";
 import type OpenAI from "openai";
 
 type Message = OpenAI.Chat.ChatCompletionMessageParam;
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, model, projectId, connectedServices } = await req.json();
 
-    // Server-side spend limit + exposure cap enforcement
-    if (projectId) {
+    // Server-side spend limit + exposure cap enforcement (skip for superadmin)
+    if (projectId && !(await isSuperAdmin(userId))) {
       const limitCheck = await checkSpendLimits(userId, projectId);
       if (limitCheck) {
         return new Response(

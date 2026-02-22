@@ -152,6 +152,7 @@ export async function POST(req: NextRequest) {
           cardOnFile: !!user?.stripe_customer_id && !!user?.card_last4,
           cardLast4: user?.card_last4,
           gmailConnected: user?.gmail_connected ?? false,
+          accountType: user?.account_type ?? "standard",
         },
       });
       setSessionCookie(response, sessionToken);
