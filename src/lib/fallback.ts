@@ -141,12 +141,53 @@ async function streamAnthropic(
   // Convert OpenAI message format to Anthropic format
   const systemMsg = conversation.find((m) => m.role === "system");
   const systemText = typeof systemMsg?.content === "string" ? systemMsg.content : "";
-  const msgs: Anthropic.MessageParam[] = conversation
-    .filter((m) => m.role !== "system" && m.role !== "tool")
-    .map((m) => ({
-      role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
-      content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
-    }));
+  const msgs: Anthropic.MessageParam[] = [];
+  for (const m of conversation) {
+    if (m.role === "system") continue;
+
+    if (m.role === "assistant") {
+      const text = typeof m.content === "string" ? m.content : "";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolCalls = (m as any).tool_calls as
+        | { id: string; function: { name: string; arguments: string } }[]
+        | undefined;
+
+      if (toolCalls && toolCalls.length > 0) {
+        // Assistant message with tool calls → use content block array
+        const content: Anthropic.ContentBlockParam[] = [];
+        if (text) content.push({ type: "text", text });
+        for (const tc of toolCalls) {
+          let input: Record<string, unknown> = {};
+          try { input = JSON.parse(tc.function.arguments); } catch { /* malformed */ }
+          content.push({ type: "tool_use", id: tc.id, name: tc.function.name, input });
+        }
+        msgs.push({ role: "assistant", content });
+      } else if (text) {
+        msgs.push({ role: "assistant", content: text });
+      }
+    } else if (m.role === "tool") {
+      // Tool result → convert to Anthropic tool_result in a user message
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolCallId = (m as any).tool_call_id as string;
+      const text = typeof m.content === "string" ? m.content : String(m.content ?? "");
+      const toolResult: Anthropic.ToolResultBlockParam = {
+        type: "tool_result",
+        tool_use_id: toolCallId,
+        content: text,
+      };
+      // Merge consecutive tool results into one user message (Anthropic requires alternating roles)
+      const last = msgs[msgs.length - 1];
+      if (last?.role === "user" && Array.isArray(last.content)) {
+        (last.content as Anthropic.ToolResultBlockParam[]).push(toolResult);
+      } else {
+        msgs.push({ role: "user", content: [toolResult] });
+      }
+    } else {
+      // User message
+      const text = typeof m.content === "string" ? m.content : String(m.content ?? "");
+      msgs.push({ role: "user", content: text });
+    }
+  }
 
   // Convert tool defs to Anthropic format
   const anthropicTools = tools.map((t) => ({
@@ -185,11 +226,11 @@ async function streamAnthropic(
         toolCalls.set(toolIdx, { id: event.content_block.id, name: event.content_block.name, arguments: "" });
         toolIdx++;
       }
-    } else if (event.type === "message_delta" && event.usage) {
-      send({ type: "usage", tokensIn: 0, tokensOut: event.usage.output_tokens });
     }
   }
 
+  // Use finalMessage for complete usage data (input + output tokens).
+  // Avoid sending partial usage from message_delta which only has output tokens.
   const finalMessage = await stream.finalMessage();
   if (finalMessage.usage) {
     send({ type: "usage", tokensIn: finalMessage.usage.input_tokens, tokensOut: finalMessage.usage.output_tokens });

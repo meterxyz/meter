@@ -564,14 +564,20 @@ export const useMeterStore = create<MeterState>()(
           // was accumulated, not the final model's rate.
           const selectedPricingId = s.selectedModelId === "auto" ? "anthropic/claude-sonnet-4.6" : s.selectedModelId;
           const streamingModel = getModel(selectedPricingId);
-          const streamedOutputCost = (last?.tokensOut ?? 0) * streamingModel.outputPrice;
+          const streamedEstimateOut = last?.tokensOut ?? 0;
+          const streamedOutputCost = streamedEstimateOut * streamingModel.outputPrice;
           const finalOutputCost = tokensOut * model.outputPrice;
           const costDelta = inputCost + (finalOutputCost - streamedOutputCost);
+
+          // Reconcile todayTokensOut: streaming accumulated char/4 estimates,
+          // now correct to actual API-reported output tokens.
+          const tokensOutAdjustment = tokensOut - streamedEstimateOut;
 
           const updated = {
             ...active,
             messages: msgs,
             todayTokensIn: active.todayTokensIn + tokensIn,
+            todayTokensOut: Math.max(0, active.todayTokensOut + tokensOutAdjustment),
             todayMessageCount: active.todayMessageCount + 1,
             todayByModel: byModel,
             todayCost: active.todayCost + costDelta,

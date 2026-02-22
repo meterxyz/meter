@@ -66,17 +66,43 @@ export async function POST(req: NextRequest) {
         const totalTokensOut = { value: 0 };
         let activeModel = resolvedModel;
 
+        // Aggregate API-reported usage across tool rounds instead of
+        // only capturing the last round (which under-reports total cost).
+        let cumulativeTokensIn = 0;
+        let cumulativeTokensOut = 0;
+        let roundTokensIn = 0;
+        let roundTokensOut = 0;
+
+        // Intercept usage events from streaming adapters — accumulate per-round,
+        // then sum across rounds. Forward everything else to the client.
+        const roundSend: Send = (data) => {
+          if (data.type === "usage") {
+            // Within a round, replace (last event wins for that round)
+            roundTokensIn = (data.tokensIn as number) || 0;
+            roundTokensOut = (data.tokensOut as number) || 0;
+            return;
+          }
+          send(data);
+        };
+
         try {
 
           for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+            roundTokensIn = 0;
+            roundTokensOut = 0;
+
             const result = await streamWithFallback(
               activeModel,
               conversation,
               tools,
-              send,
+              roundSend,
               estimateTokens,
               totalTokensOut,
             );
+
+            // Accumulate this round's API-reported usage
+            cumulativeTokensIn += roundTokensIn;
+            cumulativeTokensOut += roundTokensOut;
 
             // Track which model actually responded (for subsequent tool rounds)
             activeModel = result.actualModel;
@@ -136,6 +162,11 @@ export async function POST(req: NextRequest) {
             code: "all_providers_failed",
             model: resolvedModel,
           });
+        }
+
+        // Send aggregated usage across all tool rounds as a single event
+        if (cumulativeTokensIn > 0 || cumulativeTokensOut > 0) {
+          send({ type: "usage", tokensIn: cumulativeTokensIn, tokensOut: cumulativeTokensOut });
         }
 
         send({ type: "done", actualModel: activeModel });
