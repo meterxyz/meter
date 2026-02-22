@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/tools";
 import { streamWithFallback, type Send } from "@/lib/fallback";
+import { runDebate } from "@/lib/debate";
 import { getSupabaseServer } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 import type OpenAI from "openai";
@@ -63,6 +64,20 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
+        // ── Meter 1.0 Debate Mode ──────────────────────────────────
+        if (resolvedModel === "meter-1.0") {
+          try {
+            await runDebate(conversation, send);
+          } catch (err) {
+            console.error("[chat] debate failed:", (err as Error).message);
+            send({ type: "error", code: "debate_failed", model: "meter-1.0" });
+            send({ type: "done", actualModel: "meter-1.0" });
+          }
+          controller.close();
+          return;
+        }
+
+        // ── Standard single-model flow ─────────────────────────────
         const totalTokensOut = { value: 0 };
         let activeModel = resolvedModel;
 

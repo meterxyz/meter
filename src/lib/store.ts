@@ -17,6 +17,12 @@ export interface ActionCard {
   metadata?: Record<string, string>;
 }
 
+export interface DebateTurn {
+  model: string;
+  phase: "opening" | "challenge";
+  content: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -33,6 +39,7 @@ export interface ChatMessage {
   timestamp: number;
   cards?: ActionCard[];
   decisionId?: string;
+  debateTrace?: DebateTurn[];
 }
 
 export interface PaymentCard {
@@ -152,6 +159,7 @@ interface MeterState {
   approveCard: (messageId: string, cardId: string) => void;
   rejectCard: (messageId: string, cardId: string) => void;
   setMessageDecisionId: (decisionId: string) => void;
+  setDebateTrace: (trace: DebateTurn[]) => void;
 
   setPendingInput: (v: string | null) => void;
 
@@ -783,6 +791,17 @@ export const useMeterStore = create<MeterState>()(
           const last = msgs[msgs.length - 1];
           if (last && last.role === "assistant") {
             msgs[msgs.length - 1] = { ...last, decisionId };
+          }
+          return { projects: replaceActiveProject(s, { ...active, messages: msgs }) };
+        }),
+
+      setDebateTrace: (trace) =>
+        set((s) => {
+          const active = getActiveProject(s);
+          const msgs = [...active.messages];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant") {
+            msgs[msgs.length - 1] = { ...last, debateTrace: trace };
           }
           return { projects: replaceActiveProject(s, { ...active, messages: msgs }) };
         }),

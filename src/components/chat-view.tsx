@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { useMeterStore, selectConnectedServices, selectWorkspaceCardReady, ChatMessage } from "@/lib/store";
+import { useMeterStore, selectConnectedServices, selectWorkspaceCardReady, ChatMessage, type DebateTurn } from "@/lib/store";
 import { MeterPill } from "@/components/meter-pill";
 import { HeaderMeter } from "@/components/header-meter";
 import { ModelPickerTrigger, ModelPickerPanel } from "@/components/model-picker";
@@ -18,6 +18,7 @@ import { InlineCardForm } from "@/components/inline-card-form";
 import { getModel, shortModelName } from "@/lib/models";
 import { useSessionSync } from "@/lib/use-session-sync";
 import { useDecisionsStore } from "@/lib/decisions-store";
+import { DebateTrace, DebateModelDots } from "@/components/debate-trace";
 import ReactMarkdown from "react-markdown";
 
 const DRAFT_KEY = (id: string) => `meter:draft:${id}`;
@@ -84,6 +85,51 @@ function DecisionPill({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+/* ─── Decision-point buttons (Decide / Debate) ─── */
+
+function DecisionPointButtons({
+  onDecide,
+  onDebate,
+  disabled,
+}: {
+  onDecide: () => void;
+  onDebate: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <button
+        onClick={onDecide}
+        disabled={disabled}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 font-mono text-[11px] text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+        Decide
+      </button>
+      <button
+        onClick={onDebate}
+        disabled={disabled}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 font-mono text-[11px] text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        Debate
+      </button>
+    </div>
+  );
+}
+
+/** Check if a message contains the [decision-point] tag */
+function hasDecisionPoint(content: string): boolean {
+  return content.includes("[decision-point]");
+}
+
+/** Strip the [decision-point] tag from content for display */
+function stripDecisionPoint(content: string): string {
+  return content.replace(/\s*\[decision-point\]\s*/g, "").trim();
+}
+
 const mdComponents = {
   a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
     <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
@@ -102,7 +148,10 @@ function MessageFooter({ msg, projectId }: { msg: ChatMessage; projectId: string
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground/70">
-      <span style={{ color: msg.model ? getModel(msg.model).color : undefined }}>{modelName}</span>
+      <span className="inline-flex items-center" style={{ color: msg.model ? getModel(msg.model).color : undefined }}>
+        {modelName}
+        {msg.model === "meter-1.0" && <DebateModelDots />}
+      </span>
       <span className="text-muted-foreground/30">&middot;</span>
       <span>{totalTokens.toLocaleString()} tokens</span>
       <span className="text-muted-foreground/30">&middot;</span>
@@ -274,6 +323,10 @@ export function ChatView() {
   const [slashQuery, setSlashQuery] = useState("");
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [apiKeyProvider, setApiKeyProvider] = useState<string | null>(null);
+  // Debate mode state
+  const [debateTrace, setDebateTraceLocal] = useState<DebateTurn[]>([]);
+  const [activeDebateTurn, setActiveDebateTurn] = useState<{ model: string; phase: string; content: string } | null>(null);
+  const [debatePhase, setDebatePhase] = useState<"debating" | "synthesizing" | null>(null);
   const slashRef = useRef<SlashCommandHandle>(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const isNearBottomRef = useRef(true);
@@ -399,6 +452,181 @@ export function ChatView() {
     });
   }, [messages]);
 
+  /** Core streaming function shared by handleSend and handleDebate */
+  const streamResponse = async (userContent: string, modelOverride?: string) => {
+    isNearBottomRef.current = true;
+    userScrolledAwayRef.current = false;
+
+    const userMsg: ChatMessage = {
+      id: Math.random().toString(36).slice(2, 10),
+      role: "user",
+      content: userContent,
+      timestamp: Date.now(),
+    };
+    addMessage(userMsg);
+
+    const assistantMsg: ChatMessage = {
+      id: Math.random().toString(36).slice(2, 10),
+      role: "assistant",
+      content: "",
+      tokensOut: 0,
+      receiptStatus: "signing",
+      timestamp: Date.now(),
+    };
+    addMessage(assistantMsg);
+    setStreaming(true);
+
+    const effectiveModel = modelOverride ?? selectedModelId;
+    const isDebateMode = effectiveModel === "meter-1.0";
+
+    // Reset debate state
+    if (isDebateMode) {
+      setDebateTraceLocal([]);
+      setActiveDebateTurn(null);
+      setDebatePhase("debating");
+    }
+
+    // Track debate trace locally during streaming
+    const localTrace: DebateTurn[] = [];
+
+    try {
+      const allMessages = [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: userContent },
+      ];
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: allMessages,
+          model: effectiveModel,
+          projectId: activeProjectId,
+          connectedServices: Object.keys(connectedServices).filter(
+            (k) => connectedServices[k]
+          ),
+        }),
+      });
+
+      if (res.status === 429) {
+        const body = await res.json().catch(() => ({ error: "Spend limit reached" }));
+        updateLastAssistantMessage(body.error ?? "Spend limit reached. Please adjust your limits or wait for the next period.", 0);
+        return;
+      }
+      if (!res.ok) throw new Error(`Chat API failed (${res.status})`);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No reader");
+
+      const decoder = new TextDecoder();
+      let fullContent = "";
+      let finalUsage: { tokensIn: number; tokensOut: number; confidence: number } | null = null;
+      let actualModelUsed: string | null = null;
+      let buffer = "";
+      let currentTurn: { model: string; phase: string; content: string } | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6);
+          if (payload === "[DONE]") continue;
+
+          try {
+            const data = JSON.parse(payload);
+
+            // ── Debate-specific events ────────────────────────
+            if (data.type === "debate_start") {
+              // Debate started — UI already set above
+            } else if (data.type === "debate_turn_start") {
+              currentTurn = { model: data.model as string, phase: data.phase as string, content: "" };
+              setActiveDebateTurn(currentTurn);
+            } else if (data.type === "debate_turn_delta") {
+              if (currentTurn) {
+                currentTurn = { model: currentTurn.model, phase: currentTurn.phase, content: currentTurn.content + (data.content as string) };
+                setActiveDebateTurn(currentTurn);
+              }
+            } else if (data.type === "debate_turn_end") {
+              if (currentTurn) {
+                localTrace.push({
+                  model: currentTurn.model,
+                  phase: currentTurn.phase as "opening" | "challenge",
+                  content: currentTurn.content,
+                });
+                setDebateTraceLocal([...localTrace]);
+                setActiveDebateTurn(null);
+                currentTurn = null;
+              }
+            } else if (data.type === "debate_synthesis_start") {
+              setDebatePhase("synthesizing");
+              setActiveDebateTurn(null);
+
+            // ── Standard events ───────────────────────────────
+            } else if (data.type === "delta") {
+              fullContent += data.content;
+              setActiveTool(null);
+              setRerouting(null);
+              updateLastAssistantMessage(fullContent, data.tokensOut);
+            } else if (data.type === "tool_call") {
+              setActiveTool(data.name as string);
+            } else if (data.type === "tool_result") {
+              if (data.name === "save_decision" && data.decision) {
+                const d = data.decision as { title: string; status: string; choice: string; alternatives?: string[]; reasoning?: string };
+                const decId = useDecisionsStore.getState().addDecision({
+                  title: d.title,
+                  status: d.status === "decided" ? "decided" : "undecided",
+                  choice: d.choice,
+                  alternatives: d.alternatives,
+                  reasoning: d.reasoning ?? undefined,
+                  projectId: activeProjectId,
+                });
+                useMeterStore.getState().setMessageDecisionId(decId);
+              }
+            } else if (data.type === "rerouting") {
+              setRerouting({ provider: data.provider as string, toModel: data.to as string });
+            } else if (data.type === "error") {
+              const errorPayload = JSON.stringify({ code: data.code, model: data.model });
+              fullContent = `__error__${errorPayload}`;
+              updateLastAssistantMessage(fullContent, 0);
+            } else if (data.type === "done") {
+              if (data.actualModel) actualModelUsed = data.actualModel as string;
+            } else if (data.type === "usage") {
+              finalUsage = {
+                tokensIn: data.tokensIn,
+                tokensOut: data.tokensOut,
+                confidence: data.confidence ?? 0,
+              };
+            }
+          } catch {
+            // noop
+          }
+        }
+      }
+
+      // Persist debate trace to the message
+      if (isDebateMode && localTrace.length > 0) {
+        useMeterStore.getState().setDebateTrace(localTrace);
+      }
+
+      if (finalUsage) {
+        finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence, actualModelUsed ?? undefined);
+      }
+    } catch {
+      // keep silent for now
+    } finally {
+      setStreaming(false);
+      setActiveTool(null);
+      setRerouting(null);
+      setDebatePhase(null);
+      setActiveDebateTurn(null);
+    }
+  };
+
   const handleSend = async () => {
     const input = inputRef.current;
     if (!input || !input.value.trim() || isStreaming || !workspaceCardReady) return;
@@ -432,133 +660,19 @@ export function ChatView() {
     input.style.height = "auto";
     localStorage.removeItem(DRAFT_KEY(activeProjectId));
 
-    isNearBottomRef.current = true;
-    userScrolledAwayRef.current = false;
+    await streamResponse(userContent);
+  };
 
-    const userMsg: ChatMessage = {
-      id: Math.random().toString(36).slice(2, 10),
-      role: "user",
-      content: userContent,
-      timestamp: Date.now(),
-    };
-    addMessage(userMsg);
+  /** Triggered by the "Debate" button on a decision-point message */
+  const handleDebate = async () => {
+    if (isStreaming || !workspaceCardReady) return;
+    await streamResponse("Give me a multi-model debate on this — I want to hear different perspectives before deciding.", "meter-1.0");
+  };
 
-    const assistantMsgId = Math.random().toString(36).slice(2, 10);
-    const assistantMsg: ChatMessage = {
-      id: assistantMsgId,
-      role: "assistant",
-      content: "",
-      tokensOut: 0,
-      receiptStatus: "signing",
-      timestamp: Date.now(),
-    };
-    addMessage(assistantMsg);
-    setStreaming(true);
-
-    try {
-      const allMessages = [
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: userContent },
-      ];
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: allMessages,
-          model: selectedModelId,
-          projectId: activeProjectId,
-          connectedServices: Object.keys(connectedServices).filter(
-            (k) => connectedServices[k]
-          ),
-        }),
-      });
-
-      if (res.status === 429) {
-        const body = await res.json().catch(() => ({ error: "Spend limit reached" }));
-        updateLastAssistantMessage(body.error ?? "Spend limit reached. Please adjust your limits or wait for the next period.", 0);
-        return;
-      }
-      if (!res.ok) throw new Error(`Chat API failed (${res.status})`);
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No reader");
-
-      const decoder = new TextDecoder();
-      let fullContent = "";
-      let finalUsage: { tokensIn: number; tokensOut: number; confidence: number } | null = null;
-      let actualModelUsed: string | null = null;
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIdx: number;
-        while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.slice(0, newlineIdx).trim();
-          buffer = buffer.slice(newlineIdx + 1);
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6);
-          if (payload === "[DONE]") continue;
-
-          try {
-            const data = JSON.parse(payload);
-            if (data.type === "delta") {
-              fullContent += data.content;
-              setActiveTool(null);
-              setRerouting(null);
-              updateLastAssistantMessage(fullContent, data.tokensOut);
-            } else if (data.type === "tool_call") {
-              setActiveTool(data.name as string);
-            } else if (data.type === "tool_result") {
-              if (data.name === "save_decision" && data.decision) {
-                const d = data.decision as { title: string; status: string; choice: string; alternatives?: string[]; reasoning?: string };
-                const decId = useDecisionsStore.getState().addDecision({
-                  title: d.title,
-                  status: d.status === "decided" ? "decided" : "undecided",
-                  choice: d.choice,
-                  alternatives: d.alternatives,
-                  reasoning: d.reasoning ?? undefined,
-                  projectId: activeProjectId,
-                });
-                useMeterStore.getState().setMessageDecisionId(decId);
-              }
-            } else if (data.type === "rerouting") {
-              // Show rerouting status line — the fallback system is switching models
-              setRerouting({ provider: data.provider as string, toModel: data.to as string });
-            } else if (data.type === "error") {
-              const errorPayload = JSON.stringify({
-                code: data.code,
-                model: data.model,
-              });
-              fullContent = `__error__${errorPayload}`;
-              updateLastAssistantMessage(fullContent, 0);
-            } else if (data.type === "done") {
-              if (data.actualModel) actualModelUsed = data.actualModel as string;
-            } else if (data.type === "usage") {
-              finalUsage = {
-                tokensIn: data.tokensIn,
-                tokensOut: data.tokensOut,
-                confidence: data.confidence ?? 0,
-              };
-            }
-          } catch {
-            // noop
-          }
-        }
-      }
-
-      if (finalUsage) {
-        finalizeResponse(finalUsage.tokensIn, finalUsage.tokensOut, finalUsage.confidence, actualModelUsed ?? undefined);
-      }
-    } catch {
-      // keep silent for now
-    } finally {
-      setStreaming(false);
-      setActiveTool(null);
-      setRerouting(null);
-    }
+  /** Triggered by the "Decide" button on a decision-point message */
+  const handleDecide = async () => {
+    if (isStreaming || !workspaceCardReady) return;
+    await streamResponse("Yes, log that as a decision.");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -797,46 +911,81 @@ export function ChatView() {
               </div>
             )}
 
-            {messages.map((msg) => (
-              <div key={msg.id} className="group/msg relative mb-4">
-                <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
-                    {msg.role === "assistant" && msg.content && !msg.content.startsWith("__error__") && (
-                      <CopyButton text={msg.content} />
-                    )}
-                    {msg.role === "assistant" && msg.content.startsWith("__error__") ? (
-                      <ErrorCard payload={msg.content.slice("__error__".length)} />
-                    ) : msg.role === "assistant" ? (
-                      <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-a:text-blue-400">
-                        <ReactMarkdown components={mdComponents}>{msg.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                    )}
+            {messages.map((msg, msgIdx) => {
+              const isLastAssistant = msg.role === "assistant" && msgIdx === messages.length - 1;
+              const displayContent = msg.role === "assistant" ? stripDecisionPoint(msg.content) : msg.content;
+              const showDecisionButtons = msg.role === "assistant"
+                && hasDecisionPoint(msg.content)
+                && !msg.decisionId
+                && !isStreaming;
+              // Show live debate trace on the last assistant message while streaming
+              const showLiveDebate = isLastAssistant && isStreaming && debatePhase;
+              // Show persisted debate trace on any message that has one
+              const showPersistedDebate = msg.debateTrace && msg.debateTrace.length > 0 && !showLiveDebate;
 
-                    {msg.cards && msg.cards.length > 0 && (
-                      <div className="mt-2">
-                        {msg.cards.map((card) => (
-                          <ActionCard
-                            key={card.id}
-                            card={card}
-                            onApprove={() => approveCard(msg.id, card.id)}
-                            onReject={() => rejectCard(msg.id, card.id)}
-                          />
-                        ))}
-                      </div>
-                    )}
+              return (
+                <div key={msg.id} className="group/msg relative mb-4">
+                  <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`relative max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-foreground/10 text-foreground" : "text-foreground"}`}>
+                      {msg.role === "assistant" && displayContent && !displayContent.startsWith("__error__") && (
+                        <CopyButton text={displayContent} />
+                      )}
 
-                    {msg.role === "assistant" && msg.decisionId && (
-                      <DecisionPill onOpen={() => { setInspectorOpen(true); setInspectorTab("decisions"); }} />
-                    )}
-                    {msg.role === "assistant" && <MessageFooter msg={msg} projectId={activeProjectId} />}
+                      {/* Debate trace — live or persisted */}
+                      {showLiveDebate && (
+                        <DebateTrace
+                          trace={debateTrace}
+                          activeTurn={activeDebateTurn}
+                          phase={debatePhase}
+                        />
+                      )}
+                      {showPersistedDebate && (
+                        <DebateTrace trace={msg.debateTrace!} />
+                      )}
+
+                      {msg.role === "assistant" && displayContent.startsWith("__error__") ? (
+                        <ErrorCard payload={displayContent.slice("__error__".length)} />
+                      ) : msg.role === "assistant" ? (
+                        <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-a:text-blue-400">
+                          <ReactMarkdown components={mdComponents}>{displayContent}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                      )}
+
+                      {msg.cards && msg.cards.length > 0 && (
+                        <div className="mt-2">
+                          {msg.cards.map((card) => (
+                            <ActionCard
+                              key={card.id}
+                              card={card}
+                              onApprove={() => approveCard(msg.id, card.id)}
+                              onReject={() => rejectCard(msg.id, card.id)}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Decision point buttons: Decide / Debate */}
+                      {showDecisionButtons && (
+                        <DecisionPointButtons
+                          onDecide={handleDecide}
+                          onDebate={handleDebate}
+                          disabled={isStreaming}
+                        />
+                      )}
+
+                      {msg.role === "assistant" && msg.decisionId && (
+                        <DecisionPill onOpen={() => { setInspectorOpen(true); setInspectorTab("decisions"); }} />
+                      )}
+                      {msg.role === "assistant" && <MessageFooter msg={msg} projectId={activeProjectId} />}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
-            {showThinking && <ThinkingIndicator toolName={activeTool} rerouting={rerouting} />}
+            {showThinking && !debatePhase && <ThinkingIndicator toolName={activeTool} rerouting={rerouting} />}
 
             <div ref={bottomRef} data-scroll-anchor />
           </div>

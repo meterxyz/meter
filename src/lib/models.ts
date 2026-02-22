@@ -10,6 +10,13 @@ export interface ModelConfig {
 /** Multiplier applied on top of provider costs. 3 = users pay 3x provider rate. */
 export const MARKUP_MULTIPLIER = 3;
 
+/** Models used in Meter 1.0 debate mode (fixed roster) */
+export const DEBATE_MODELS = [
+  "anthropic/claude-opus-4.6",
+  "openai/gpt-5.2",
+  "google/gemini-3-pro-preview",
+] as const;
+
 export const MODELS: ModelConfig[] = [
   {
     id: "auto",
@@ -18,6 +25,15 @@ export const MODELS: ModelConfig[] = [
     color: "#A1A1AA",
     inputPrice: (3.0 / 1_000_000) * MARKUP_MULTIPLIER,
     outputPrice: (15.0 / 1_000_000) * MARKUP_MULTIPLIER,
+  },
+  {
+    id: "meter-1.0",
+    name: "Meter 1.0",
+    provider: "Meter",
+    color: "#F59E0B",
+    // Blended rate across Opus + GPT + Gemini + synthesis
+    inputPrice: (8.75 / 1_000_000) * MARKUP_MULTIPLIER,
+    outputPrice: (51.0 / 1_000_000) * MARKUP_MULTIPLIER,
   },
   {
     id: "anthropic/claude-sonnet-4.6",

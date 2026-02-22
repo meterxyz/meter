@@ -1,7 +1,7 @@
 "use client";
 
 import { useMeterStore } from "@/lib/store";
-import { MODELS, getModel, ModelConfig } from "@/lib/models";
+import { MODELS, DEBATE_MODELS, getModel, shortModelName, ModelConfig } from "@/lib/models";
 
 function ProviderLogo({ provider, size = 14 }: { provider: string; size?: number }) {
   switch (provider) {
@@ -115,7 +115,23 @@ export function ModelPickerPanel({
             <ModelLogo model={m} size={16} />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-medium text-foreground truncate">{m.name}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">{m.provider}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">
+                {m.id === "meter-1.0" ? (
+                  <span className="inline-flex items-center gap-1">
+                    {DEBATE_MODELS.map((id) => {
+                      const dm = getModel(id);
+                      return (
+                        <span key={id} className="inline-flex items-center gap-0.5">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: dm.color }} />
+                          <span>{shortModelName(id)}</span>
+                        </span>
+                      );
+                    })}
+                  </span>
+                ) : (
+                  m.provider
+                )}
+              </div>
             </div>
             {m.id === selectedModelId && (
               <svg
