@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToolsForConnectors, buildSystemPrompt, executeTool } from "@/lib/tools";
 import { streamWithFallback, type Send } from "@/lib/fallback";
+import { runDebate } from "@/lib/debate";
 import { getSupabaseServer } from "@/lib/supabase";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, isSuperAdmin } from "@/lib/auth";
 import type OpenAI from "openai";
 
 type Message = OpenAI.Chat.ChatCompletionMessageParam;
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, model, projectId, connectedServices } = await req.json();
 
-    // Server-side spend limit + exposure cap enforcement
-    if (projectId) {
+    // Server-side spend limit + exposure cap enforcement (skip for superadmin)
+    if (projectId && !(await isSuperAdmin(userId))) {
       const limitCheck = await checkSpendLimits(userId, projectId);
       if (limitCheck) {
         return new Response(
@@ -63,6 +64,20 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
+        // ── Meter 1.0 Debate Mode ──────────────────────────────────
+        if (resolvedModel === "meter-1.0") {
+          try {
+            await runDebate(conversation, send);
+          } catch (err) {
+            console.error("[chat] debate failed:", (err as Error).message);
+            send({ type: "error", code: "debate_failed", model: "meter-1.0" });
+            send({ type: "done", actualModel: "meter-1.0" });
+          }
+          controller.close();
+          return;
+        }
+
+        // ── Standard single-model flow ─────────────────────────────
         const totalTokensOut = { value: 0 };
         let activeModel = resolvedModel;
 

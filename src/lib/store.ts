@@ -17,6 +17,12 @@ export interface ActionCard {
   metadata?: Record<string, string>;
 }
 
+export interface DebateTurn {
+  model: string;
+  phase: "opening" | "challenge" | "rebuttal";
+  content: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -33,6 +39,7 @@ export interface ChatMessage {
   timestamp: number;
   cards?: ActionCard[];
   decisionId?: string;
+  debateTrace?: DebateTurn[];
 }
 
 export interface PaymentCard {
@@ -85,6 +92,7 @@ interface ProjectThread {
 interface MeterState {
   userId: string | null;
   email: string | null;
+  accountType: "standard" | "superadmin";
   authenticated: boolean;
   cardOnFile: boolean;
   cardLast4: string | null;
@@ -124,7 +132,7 @@ interface MeterState {
   inspectorOpen: boolean;
   inspectorTab: string;
 
-  setAuth: (userId: string, email: string) => void;
+  setAuth: (userId: string, email: string, accountType?: "standard" | "superadmin") => void;
   setCardOnFile: (v: boolean, last4?: string, brand?: string) => void;
   setStripeCustomerId: (id: string) => void;
   connectService: (id: string) => void;
@@ -152,6 +160,7 @@ interface MeterState {
   approveCard: (messageId: string, cardId: string) => void;
   rejectCard: (messageId: string, cardId: string) => void;
   setMessageDecisionId: (decisionId: string) => void;
+  setDebateTrace: (trace: DebateTurn[]) => void;
 
   setPendingInput: (v: string | null) => void;
 
@@ -260,6 +269,7 @@ export const useMeterStore = create<MeterState>()(
     (set, get) => ({
       userId: null,
       email: null,
+      accountType: "standard" as const,
       authenticated: false,
       cardOnFile: false,
       cardLast4: null,
@@ -292,7 +302,7 @@ export const useMeterStore = create<MeterState>()(
       inspectorOpen: false,
       inspectorTab: "decisions",
 
-      setAuth: (userId, email) => set({ userId, email, authenticated: true }),
+      setAuth: (userId, email, accountType) => set({ userId, email, accountType: accountType ?? "standard", authenticated: true }),
       setCardOnFile: (v, last4, brand) =>
         set((s) => ({
           cardOnFile: v,
@@ -787,6 +797,17 @@ export const useMeterStore = create<MeterState>()(
           return { projects: replaceActiveProject(s, { ...active, messages: msgs }) };
         }),
 
+      setDebateTrace: (trace) =>
+        set((s) => {
+          const active = getActiveProject(s);
+          const msgs = [...active.messages];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant") {
+            msgs[msgs.length - 1] = { ...last, debateTrace: trace };
+          }
+          return { projects: replaceActiveProject(s, { ...active, messages: msgs }) };
+        }),
+
       setStreaming: (v) =>
         set((s) => {
           const active = getActiveProject(s);
@@ -907,6 +928,7 @@ export const useMeterStore = create<MeterState>()(
         const today = todayStr();
         const state = get();
         if (state.lastAutoSettleDate === today) return;
+        if (state.accountType === "superadmin") return; // superadmin never auto-settles
         set({ lastAutoSettleDate: today });
 
         const balance = state.getPendingBalance();
@@ -946,6 +968,7 @@ export const useMeterStore = create<MeterState>()(
       partialize: (s) => ({
         userId: s.userId,
         email: s.email,
+        accountType: s.accountType,
         authenticated: s.authenticated,
         cardOnFile: s.cardOnFile,
         cardLast4: s.cardLast4,

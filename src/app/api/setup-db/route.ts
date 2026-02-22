@@ -144,6 +144,10 @@ const STATEMENTS: string[] = [
    and a.updated_at < b.updated_at`,
   `create unique index if not exists idx_oauth_tokens_unique on oauth_tokens(user_id, provider, workspace_id)`,
 
+  // Account type (superadmin creator accounts skip settlement)
+  `alter table meter_users add column if not exists account_type text not null default 'standard'`,
+  `update meter_users set account_type = 'superadmin' where email = 'a@buxor.co' and account_type = 'standard'`,
+
   // Indexes
   `create index if not exists idx_oauth_tokens_user on oauth_tokens(user_id)`,
   `create index if not exists idx_oauth_tokens_workspace on oauth_tokens(workspace_id)`,

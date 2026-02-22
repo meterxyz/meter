@@ -9,6 +9,7 @@
 create table if not exists meter_users (
   id text primary key,
   email text unique not null,
+  account_type text not null default 'standard',  -- 'standard' | 'superadmin'
   stripe_customer_id text,
   card_last4 text,
   card_brand text,
@@ -228,3 +229,13 @@ create table if not exists auth_sessions (
 
 create index if not exists idx_auth_sessions_user on auth_sessions(user_id);
 create index if not exists idx_auth_sessions_expires on auth_sessions(expires_at);
+
+-- =============================================
+-- ACCOUNT TYPE (superadmin, standard)
+-- =============================================
+
+-- Add account_type column if it doesn't already exist
+-- alter table meter_users add column if not exists account_type text not null default 'standard';
+
+-- Set a@buxor.co as superadmin creator account (no settlement charges)
+-- update meter_users set account_type = 'superadmin' where email = 'a@buxor.co';
